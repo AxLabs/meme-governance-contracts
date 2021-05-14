@@ -30,8 +30,8 @@ public class MemeGovernance {
     static final ByteString VOTING_TIME_KEY = StringLiteralHelper.hexToBytes("0x02");
     static final ByteString SAFE_TIME_KEY = StringLiteralHelper.hexToBytes("0x03");
 
-    static final byte CREATE = (byte) 20;
-    static final byte REMOVE = (byte) 21;
+    static final int CREATE = 1;
+    static final int REMOVE = 2;
 
     static StorageContext ctx = Storage.getStorageContext();
     static final StorageMap CONTRACT_MAP = ctx.createMap((byte) 10);
@@ -40,10 +40,13 @@ public class MemeGovernance {
     static final StorageMap VOTE_MAP = ctx.createMap((byte) 12);
     static final StorageMap VOTE_COUNT_MAP = ctx.createMap((byte) 13);
 
-    static final StorageMap DESCRIPTION_MAP = ctx.createMap((byte) 14);
-    static final StorageMap URL_MAP = ctx.createMap((byte) 15);
-    static final StorageMap IMAGE_HASH_MAP = ctx.createMap((byte) 16);
+    static final StorageMap VOTE_FOR_MAP = ctx.createMap((byte) 14);
+    static final StorageMap VOTE_AGAINST_MAP = ctx.createMap((byte) 15);
 
+    static final StorageMap DESCRIPTION_MAP = ctx.createMap((byte) 16);
+    static final StorageMap URL_MAP = ctx.createMap((byte) 17);
+    static final StorageMap IMAGE_HASH_MAP = ctx.createMap((byte) 18);
+    Implemented execute method and getters for vote count
     /**
      * Stores the final blocks for voting on proposals.
      * Used for any kind of proposal, hence only one type of proposal is allowed per meme id once at a time.
@@ -54,7 +57,7 @@ public class MemeGovernance {
      * Stores the last block on which a proposal can be safely executed.
      * After this block has passed, other proposals may overwrite the proposals id with a new proposal.
      */
-    static final StorageMap SAFE_EXEC_BLOCK_MAP = ctx.createMap((byte) 17);
+    // static final StorageMap SAFE_EXEC_BLOCK_MAP = ctx.createMap((byte) 17);
 
     @OnDeployment
     public static void deploy(Object data, boolean update) throws Exception {
@@ -75,11 +78,6 @@ public class MemeGovernance {
         return Storage.get(ctx, VOTING_TIME_KEY).toInteger();
     }
 
-    @Safe
-    public static int getSafeExecutionTime() {
-        return Storage.get(ctx, SAFE_TIME_KEY).toInteger();
-    }
-
     @DisplayName("CreationProposal")
     private static Event5Args<ByteString, String, String, String, Integer> onCreationProposal;
 
@@ -92,19 +90,21 @@ public class MemeGovernance {
      * @throws Exception
      */
     public static void proposeCreation(ByteString memeId, String description, String url, String imageHash) throws Exception {
+        if (PROPOSAL_MAP.get(memeId) != null) {
+            throw new Exception("");
+        }
         ByteString meme = (ByteString) Contract.call(memeContract, "exists", CallFlags.READ_ONLY, new Object[]{memeId});
         if (meme != null) {
             throw new Exception("A meme with the provided id already exists.");
         }
-        int currentIndex = LedgerContract.currentIndex();
-        throwIfMemeIdLocked(memeId, currentIndex);
         PROPOSAL_MAP.put(memeId, CREATE);
         DESCRIPTION_MAP.put(memeId, description);
         URL_MAP.put(memeId, url);
         IMAGE_HASH_MAP.put(memeId, imageHash);
         int finalization = LedgerContract.currentIndex() + getVotingTime();
         FINAL_VOTE_BLOCK_MAP.put(memeId, finalization);
-        SAFE_EXEC_BLOCK_MAP.put(memeId, finalization + getSafeExecutionTime());
+        VOTE_FOR_MAP.put(memeId, 0);
+        VOTE_AGAINST_MAP.put(memeId, 0);
         onCreationProposal.fire(memeId, description, url, imageHash, finalization);
     }
 
@@ -123,66 +123,107 @@ public class MemeGovernance {
             throw new Exception("No meme with the provided id exists.");
         }
         int currentIndex = LedgerContract.currentIndex();
-        throwIfMemeIdLocked(memeId, currentIndex);
         PROPOSAL_MAP.put(memeId, REMOVE);
         int finalization = currentIndex + getVotingTime();
-        int proposalIdLockedUntilBlock = finalization + getSafeExecutionTime();
         FINAL_VOTE_BLOCK_MAP.put(memeId, finalization);
-        SAFE_EXEC_BLOCK_MAP.put(memeId, proposalIdLockedUntilBlock);
+        VOTE_FOR_MAP.put(memeId, 0);
+        VOTE_AGAINST_MAP.put(memeId, 0);
         onRemovalProposal.fire(memeId, finalization);
     }
 
     @DisplayName("Vote")
     private static Event1Arg<ByteString> onVote;
 
-    public static void vote(ByteString memeId, Hash160 voter) throws Exception {
+    public static void vote(ByteString memeId, Hash160 voter, Boolean vote) throws Exception {
         if (!Runtime.checkWitness(voter)) {
             throw new Exception("No valid signature for the provided voter.");
         }
         if (PROPOSAL_MAP.get(memeId) == null) {
             throw new Exception("No proposal found.");
         }
-        throwIfVoteClosed(memeId);
-        ByteString votePrefix = new ByteString(Helper.concat(memeId.toByteArray(), voter.asByteString()));
-        if (VOTE_MAP.get(votePrefix) != null) {
+        if (!voteOpen(memeId)) {
+            throw new Exception("The vote for this meme is no longer open.");
+        }
+        ByteString voteKey = new ByteString(Helper.concat(memeId.toByteArray(), voter.asByteString()));
+        if (VOTE_MAP.get(voteKey) != null) {
             throw new Exception("Already voted.");
         }
-        VOTE_MAP.put(votePrefix, 1);
+        VOTE_MAP.put(voteKey, 1);
         int currentVotes = VOTE_COUNT_MAP.get(memeId).toInteger();
         VOTE_COUNT_MAP.put(memeId, currentVotes + 1);
+        if (vote) {
+            int votesFor = VOTE_FOR_MAP.get(memeId).toInteger();
+            VOTE_FOR_MAP.put(memeId, votesFor + 1);
+        } else {
+            int votesAgainst = VOTE_AGAINST_MAP.get(memeId).toInteger();
+            VOTE_AGAINST_MAP.put(memeId, votesAgainst + 1);
+        }
     }
 
     @Safe
-    public static int getVotes(ByteString proposalId) throws Exception {
-        ByteString voteCount = VOTE_COUNT_MAP.get(proposalId);
+    public static int getVotesFor(ByteString memeId) throws Exception {
+        ByteString votesFor = VOTE_COUNT_MAP.get(memeId);
+        if (votesFor == null) {
+            throw new Exception("No proposal for this id.");
+        }
+        return votesFor.toInteger();
+    }
+
+    @Safe
+    public static int getVotesAgainst(ByteString memeId) throws Exception {
+        ByteString votesAgainst = VOTE_AGAINST_MAP.get(memeId);
+        if (votesAgainst == null) {
+            throw new Exception("No proposal for this id.");
+        }
+        return votesAgainst.toInteger();
+    }
+
+    @Safe
+    public static int getTotalVoteCount(ByteString memeId) throws Exception {
+        ByteString voteCount = VOTE_COUNT_MAP.get(memeId);
         if (voteCount == null) {
             throw new Exception("No proposal for this id.");
         }
         return voteCount.toInteger();
     }
 
-    private static void throwIfVoteClosed(ByteString memeId) throws Exception {
+    @Safe
+    public static boolean voteOpen(ByteString memeId) {
+        if (PROPOSAL_MAP.get(memeId) == null) {
+            return false;
+        }
         int currentIndex = LedgerContract.currentIndex();
-        if (PROPOSAL_MAP.get(memeId) != null) {
-            int finalizationBlock = VOTE_MAP.get(memeId).toInteger();
-            if (currentIndex > finalizationBlock) {
-                throw new Exception("The vote for this meme is no longer open.");
-            }
-        }
+        int finalizationBlock = VOTE_MAP.get(memeId).toInteger();
+        return finalizationBlock >= currentIndex;
     }
 
-    private static void throwIfMemeIdLocked(ByteString memeId, int currentIndex) throws Exception {
-        if (PROPOSAL_MAP.get(memeId) != null) {
-            int safeExecBlock = SAFE_EXEC_BLOCK_MAP.get(memeId).toInteger();
-            if (currentIndex > safeExecBlock) {
-                throw new Exception("There exists already a proposal with the provided id.");
+    public static boolean execute(ByteString memeId) throws Exception {
+        ByteString proposal = PROPOSAL_MAP.get(memeId);
+        if (proposal == null) {
+            throw new Exception("No proposal found for this id.");
+        }
+        if (voteOpen(memeId)) {
+            throw new Exception("The voting timeframe for this id is still open.");
+        }
+        int votesFor = VOTE_FOR_MAP.get(memeId).toInteger();
+        int votesAgainst = VOTE_AGAINST_MAP.get(memeId).toInteger();
+        boolean inFavor = votesFor > votesAgainst;
+        if (inFavor && votesFor > 3) {
+            int proposalKind = proposal.toInteger();
+            if (proposalKind == CREATE) {
+                // Create Meme
+                String description = DESCRIPTION_MAP.get(memeId).toString();
+                String url = URL_MAP.get(memeId).toString();
+                String imageHash = IMAGE_HASH_MAP.get(memeId).toString();
+                return (boolean) Contract.call(memeContract, "createMeme", CallFlags.ALL,
+                    new Object[]{memeId, description, url, imageHash});
+            } else {
+                // Remove Meme
+                return (boolean) Contract.call(memeContract, "removeMeme", CallFlags.ALL,
+                    new Object[]{memeId});
             }
         }
-    }
-
-    public static boolean executeProposal(ByteString memeId) {
-        // TODO: check vote closed, check enough votes, execute proposal intention
+        // If the proposal was not accepted, there is nothing to execute.
         return true;
     }
-
 }
