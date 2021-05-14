@@ -96,21 +96,4 @@ public class MemeContract {
         ByteString imageHash = IMAGE_HASH_MAP.get(memeId);
         return new Meme(desc.toString(), url.toString(), imageHash.toString()).serialize();
     }
-
-    static class Meme {
-        public String description;
-        public String url;
-        public String image;
-
-        public Meme(String description, String url, String image) {
-            this.description = description;
-            this.url = url;
-            this.image = image;
-        }
-
-        public ByteString serialize() {
-            return new ByteString(Helper.toByteArray(description + "," + url + "," + image));
-        }
-    }
-
 }
