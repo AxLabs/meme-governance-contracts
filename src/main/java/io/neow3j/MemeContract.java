@@ -19,7 +19,7 @@ import io.neow3j.devpack.events.Event4Args;
 public class MemeContract {
 
     static Hash160 initialOwner =
-        StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
+            StringLiteralHelper.addressToScriptHash("NXXazKH39yNFWWZF5MJ8tEN98VYHwzn7g3");
     static StorageContext ctx = Storage.getStorageContext();
 
     static final StorageMap OWNER_MAP = ctx.createMap((byte) 1);
@@ -57,7 +57,7 @@ public class MemeContract {
     }
 
     public static boolean createMeme(ByteString memeId, String description,
-        String url, String imageHash) {
+            String url, String imageHash) {
         if (memeId == null || description == null || url == null || imageHash == null) {
             return false;
         }
