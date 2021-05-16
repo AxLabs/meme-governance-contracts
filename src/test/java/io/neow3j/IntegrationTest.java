@@ -11,6 +11,7 @@ import io.neow3j.contract.NefFile;
 import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.methods.response.ContractManifest;
+import io.neow3j.protocol.core.methods.response.StackItem;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.transaction.exceptions.TransactionConfigurationException;
 import io.neow3j.wallet.Account;
@@ -24,7 +25,8 @@ import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
+import java.util.List;
 
 import static io.neow3j.contract.ContractParameter.bool;
 import static io.neow3j.contract.ContractParameter.byteArrayFromString;
@@ -39,8 +41,10 @@ import static io.neow3j.transaction.Signer.global;
 import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
 import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
 import static io.neow3j.wallet.Account.createMultiSigAccount;
+import static java.util.Arrays.asList;
 import static java.util.Collections.singletonList;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
@@ -50,6 +54,15 @@ import static org.junit.Assert.fail;
 public class IntegrationTest {
 
     private static Neow3j neow3j;
+    private static SmartContract governanceContract;
+    private static SmartContract memeContract;
+
+    private static final Path MEMES_NEF_FILE = Paths.get("./build/neow3j/Memes.nef");
+    private static final Path MEMES_MANIFEST_FILE = Paths.get("./build/neow3j/Memes.manifest.json");
+    private static final Path GOVERNANCE_NEF_FILE = Paths.get("./build/neow3j/MemeGovernance.nef");
+    private static final Path GOVERNANCE_MANIFEST_FILE =
+            Paths.get("./build/neow3j/MemeGovernance.manifest.json");
+
     private static final Account defaultAccount =
             Account.fromWIF("L1eV34wPoj9weqhGijdDLtVQzUpWGHszXXpdU9dPuh2nRFFzFa7E");
     private static final Account committee =
@@ -71,9 +84,10 @@ public class IntegrationTest {
             Account.fromWIF("Kyb13EoA3RikT7RCXGRzN8QdYmhoR89RcPVE61hLUWXAMk15p1wo");
     private static final Account a8 =
             Account.fromWIF("L2bZXerkt47c5oTE99dQrhx12NMSLHm2oy1nck4E8rSeTVUbFLiV");
-    private static final Account a9 =
-            Account.fromWIF("L4zdc4z3DNmJ29UiCxQkjBemyEiFjDSUsw9XQz7rgDcgWzxtLjxs");
 
+    private static final Wallet wallet = Wallet.withAccounts(a1, a2, a3, a4, a5, a6, a7, a8);
+
+    // Governance methods
     private static final String vote = "vote";
     private static final String proposeCreation = "proposeCreation";
     private static final String proposeRemoval = "proposeRemoval";
@@ -82,47 +96,51 @@ public class IntegrationTest {
     private static final String getVotesFor = "getVotesFor";
     private static final String getVotesAgainst = "getVotesAgainst";
     private static final String getTotalVoteCount = "getTotalVoteCount";
+    private static final String getVotingTime = "getVotingTime";
     private static final String voteOpen = "voteOpen";
+    private static final String getMemeContract = "getMemeContract";
+    private static final String setMemeContract = "setMemeContract";
+
+    private static final BigInteger votingTime = BigInteger.TEN;
+
+    // Meme contract methods
     private static final String getMeme = "getMeme";
-
-    private static final Wallet wallet = Wallet.withAccounts(a1, a2, a3, a4, a5, a6, a7);
-
-    private static final Path MEMES_NEF_FILE = Paths.get("./build/neow3j/Memes.nef");
-    private static final Path MEMES_MANIFEST_FILE = Paths.get("./build/neow3j/Memes.manifest.json");
-
-    private static final Path GOVERNANCE_NEF_FILE = Paths.get("./build/neow3j/MemeGovernance.nef");
-    private static final Path GOVERNANCE_MANIFEST_FILE =
-            Paths.get("./build/neow3j/MemeGovernance.manifest.json");
-
-    private static SmartContract memeContract;
-    private static SmartContract gov;
+    private static final String getOwner = "getOwner";
+    private static final String getInitialOwner = "getInitialOwner";
 
     @BeforeClass
     public static void setUp() throws Throwable {
         neow3j = Neow3j.build(new HttpService("http://localhost:40332"));
         compileContracts();
-        fundAccounts(defaultAccount, a1, a2, a3, a4, a5, a6, a7, a8, a9);
+        fundAccounts(defaultAccount, a1, a2, a3, a4, a5, a6, a7, a8);
         memeContract = deployMemeContract();
         System.out.println("MemeContract: " + memeContract.getScriptHash());
-        gov = deployMemeGovernance();
-        setMemeContract();
-        System.out.println("MemeGovernance: " + gov.getScriptHash());
+        governanceContract = deployMemeGovernance();
+        System.out.println("MemeGovernance: " + governanceContract.getScriptHash());
+        linkMemeContract();
     }
 
-    private static void setMemeContract() throws Throwable {
+    private static void linkMemeContract() throws Throwable {
         Hash160 memeContractOnGovernance =
-                gov.callFunctionReturningScriptHash("getOwner");
+                governanceContract.callFunctionReturningScriptHash(getMemeContract);
         if (!memeContractOnGovernance.equals(memeContract.getScriptHash())) {
-            Hash256 txHash = gov.invokeFunction("setMemeContract",
+            System.out.println("setting new meme on gov");
+            Hash256 txHash = governanceContract.invokeFunction(setMemeContract,
                     hash160(IntegrationTest.memeContract.getScriptHash()))
                     .wallet(committeeWallet)
-                    .signers(calledByEntry(committee))
+                    .signers(global(committee))
                     .sign()
                     .send()
                     .getSendRawTransaction()
                     .getHash();
             waitUntilTransactionIsExecuted(txHash, neow3j);
         }
+        memeContractOnGovernance =
+                governanceContract.callFunctionReturningScriptHash(getMemeContract);
+        System.out.println(
+                "Meme contract hash on governance contract: " + memeContractOnGovernance);
+        Hash160 ownerOnMeme = memeContract.callFunctionReturningScriptHash(getOwner);
+        System.out.println("Owner of Meme contract: " + ownerOnMeme);
     }
 
     private static void compileContracts() throws IOException {
@@ -147,19 +165,22 @@ public class IntegrationTest {
         GasToken gasToken = new GasToken(neow3j);
         BigInteger amount = gasToken.toFractions(new BigDecimal("2000"));
         BigInteger minAmount = gasToken.toFractions(new BigDecimal("500"));
-        Hash256 txHash;
+        List<Hash256> txHashes = new ArrayList<>();
         for (Account a : accounts) {
             if (gasToken.getBalanceOf(a).compareTo(minAmount) < 0) {
-                txHash = gasToken
+                Hash256 txHash = gasToken
                         .transferFromSpecificAccounts(committeeWallet, a.getScriptHash(),
                                 amount, committee.getScriptHash())
                         .sign()
                         .send()
                         .getSendRawTransaction()
                         .getHash();
-                waitUntilTransactionIsExecuted(txHash, neow3j);
+                txHashes.add(txHash);
                 System.out.println("Funded account " + a.getAddress());
             }
+        }
+        for (Hash256 h : txHashes) {
+            waitUntilTransactionIsExecuted(h, neow3j);
         }
     }
 
@@ -218,7 +239,7 @@ public class IntegrationTest {
 
     private Hash256 createProposal(ContractParameter memeId, String description,
             String url, String imgHash) throws Throwable {
-        Hash256 hash = gov.invokeFunction(proposeCreation, memeId,
+        Hash256 hash = governanceContract.invokeFunction(proposeCreation, memeId,
                 string(description), string(url), string(imgHash))
                 .wallet(committeeWallet)
                 .signers(calledByEntry(committee))
@@ -231,7 +252,7 @@ public class IntegrationTest {
     }
 
     private Hash256 removeProposal(ContractParameter memeId) throws Throwable {
-        Hash256 hash = gov.invokeFunction(proposeRemoval, memeId)
+        Hash256 hash = governanceContract.invokeFunction(proposeRemoval, memeId)
                 .wallet(committeeWallet)
                 .signers(calledByEntry(committee))
                 .sign()
@@ -251,7 +272,7 @@ public class IntegrationTest {
     }
 
     private Hash256 vote(ContractParameter memeId, Account a, boolean inFavor) throws Throwable {
-        return gov.invokeFunction(
+        return governanceContract.invokeFunction(
                 vote, memeId, hash160(a.getScriptHash()), bool(inFavor))
                 .wallet(wallet)
                 .signers(calledByEntry(a))
@@ -262,7 +283,7 @@ public class IntegrationTest {
     }
 
     private Hash256 execProp(ContractParameter memeId, Account a) throws Throwable {
-        return gov.invokeFunction(execute, memeId)
+        return governanceContract.invokeFunction(execute, memeId)
                 .wallet(wallet)
                 .signers(global(a))
                 .sign()
@@ -271,30 +292,74 @@ public class IntegrationTest {
                 .getHash();
     }
 
+    private void createMemeThroughVote(ContractParameter memeId) throws Throwable {
+        String description = "coolDescription";
+        String url = "AxLabsUrl";
+        String imgHash = "awesomeImageHash";
+        createProposal(memeId, description, url, imgHash);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+
+        BigInteger finalizationBlock =
+                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
+        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
+
+        Hash256 exec = execProp(memeId, a1);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+    }
+
+    @Test
+    public void testGetInitialOwner() throws IOException {
+        Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getInitialOwner);
+        assertThat(memeOwner, is(committee.getScriptHash()));
+    }
+
     @Test
     public void testGetOwner() throws IOException {
-        Hash160 govOwner = gov.callFunctionReturningScriptHash("getOwner");
+        Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getOwner);
+        assertThat(memeOwner, is(governanceContract.getScriptHash()));
+    }
+
+    @Test
+    public void testGetOwner_gov() throws IOException {
+        Hash160 govOwner = governanceContract.callFunctionReturningScriptHash(getOwner);
         assertThat(govOwner, is(committee.getScriptHash()));
     }
 
     @Test
+    public void testGetMemeContract() throws IOException {
+        Hash160 linkedMemeContract =
+                governanceContract.callFunctionReturningScriptHash(getMemeContract);
+        assertThat(linkedMemeContract, is(memeContract.getScriptHash()));
+    }
+
+    @Test
     public void testGetVotingTime() throws IOException {
-        BigInteger votingTime = gov.callFuncReturningInt("getVotingTime");
+        BigInteger votingTime = governanceContract.callFuncReturningInt(getVotingTime);
         assertThat(votingTime, is(BigInteger.TEN));
     }
 
     @Test
     public void testProposeCreation() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("pc1MemeId12" + N);
+        ContractParameter memeId = byteArrayFromString("testProposeCreation" + N);
         Hash256 hash = basicProposal(memeId, true);
-        BigInteger creationBlockIndex = neow3j.getTransactionHeight(hash).send().getHeight();
-        BigInteger finalizationBlock = gov.callFuncReturningInt("getFinalizationBlock", memeId);
-        assertThat(finalizationBlock, is(creationBlockIndex.add(BigInteger.TEN)));
+        // Transaction height is 1 higher than the current index that was computed when executing
+        // the script.
+        BigInteger txHeight = neow3j.getTransactionHeight(hash).send().getHeight();
+        // Finalization block is the last block any vote is allowed.
+        BigInteger finalizationBlock =
+                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
+        assertThat(finalizationBlock, is(txHeight.add(votingTime).subtract(BigInteger.ONE)));
 
-        BigInteger votes = gov.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = gov.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = gov.callFuncReturningInt(getVotesAgainst, memeId);
-        boolean open = gov.callFuncReturningBool(voteOpen, memeId);
+        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
+        boolean open = governanceContract.callFuncReturningBool(voteOpen, memeId);
 
         assertThat(votes, is(BigInteger.ZERO));
         assertThat(votesFor, is(BigInteger.ZERO));
@@ -314,9 +379,9 @@ public class IntegrationTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        BigInteger votes = gov.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = gov.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = gov.callFuncReturningInt(getVotesAgainst, memeId);
+        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
 
         assertThat(votes, is(new BigInteger("3")));
         assertThat(votesFor, is(new BigInteger("3")));
@@ -331,24 +396,22 @@ public class IntegrationTest {
             assertThat(e.getMessage(), containsString("Already voted"));
         }
 
-        votes = gov.callFuncReturningInt(getTotalVoteCount, memeId);
-        votesFor = gov.callFuncReturningInt(getVotesFor, memeId);
-        votesAgainst = gov.callFuncReturningInt(getVotesAgainst, memeId);
+        votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
 
         assertThat(votes, is(new BigInteger("4")));
         assertThat(votesFor, is(new BigInteger("3")));
         assertThat(votesAgainst, is(BigInteger.ONE));
     }
 
-    private static final String N = "27";
-
     @Test
-    public void testExecute() throws Throwable {
+    public void testExecuteCreation() throws Throwable {
         ContractParameter memeId = byteArrayFromString("testExecute" + N);
-        String description = "desc";
-        String url = "url";
-        String imgHash = "imgHash";
-        Hash256 proposal = createProposal(memeId, description, url, imgHash);
+        String description = "coolDescriptionString";
+        String url = "AxLabsUrlString";
+        String imgHash = "awesomeImageHashString";
+        createProposal(memeId, description, url, imgHash);
 
         Hash256 voteFor1 = vote(memeId, a1, true);
         Hash256 voteFor2 = vote(memeId, a2, true);
@@ -357,22 +420,62 @@ public class IntegrationTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        BigInteger finalizationBlock = gov.callFuncReturningInt(getFinalizationBlock, memeId);
-        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock);
+        BigInteger finalizationBlock =
+                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
+        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
 
-        boolean isOpen = gov.callFuncReturningBool(voteOpen, memeId);
+        boolean isOpen = governanceContract.callFuncReturningBool(voteOpen, memeId);
         assertFalse(isOpen);
 
-        Hash256 exec = execProp(memeId, a1);
+        Hash256 exec = execProp(memeId, a4);
         waitUntilTransactionIsExecuted(exec, neow3j);
 
-        String response = memeContract.callInvokeFunction(getMeme)
-                .getInvocationResult().getStack().get(0).toString();
-        System.out.println(response);
-        String[] split = response.split(",");
-        assertThat(split[0], is(description));
-        assertThat(split[1], is(url));
-        assertThat(split[2], is(imgHash));
+        List<StackItem> meme = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getStack().get(0).getList();
+        assertThat(meme, hasSize(3));
+        assertThat(meme.get(0).getString(), is(description));
+        assertThat(meme.get(1).getString(), is(url));
+        assertThat(meme.get(2).getString(), is(imgHash));
     }
+
+    @Test
+    public void testExecuteRemoval() throws Throwable {
+        ContractParameter memeId = byteArrayFromString("testRemoveMeme" + N);
+        createMemeThroughVote(memeId);
+        removeProposal(memeId);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        Hash256 voteFor4 = vote(memeId, a4, true);
+        Hash256 voteFor5 = vote(memeId, a5, true);
+        Hash256 voteAgainst6 = vote(memeId, a6, false);
+        Hash256 voteAgainst7 = vote(memeId, a7, false);
+        Hash256 voteAgainst8 = vote(memeId, a8, false);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+        waitUntilTransactionIsExecuted(voteFor4, neow3j);
+        waitUntilTransactionIsExecuted(voteFor5, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst6, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst7, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst8, neow3j);
+
+        BigInteger finalizationBlock =
+                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
+        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
+
+        boolean isOpen = governanceContract.callFuncReturningBool(voteOpen, memeId);
+        assertFalse(isOpen);
+
+        Hash256 exec = execProp(memeId, a6);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+
+        String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getException();
+        assertThat(exception, containsString("No meme found for this id."));
+    }
+
+    private static final String N = "4";
 
 }

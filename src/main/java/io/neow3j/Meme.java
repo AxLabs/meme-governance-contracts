@@ -1,20 +1,15 @@
 package io.neow3j;
 
 import io.neow3j.devpack.ByteString;
-import io.neow3j.devpack.Helper;
 
 public class Meme {
-    public String description;
-    public String url;
-    public String imageHash;
+    public ByteString description;
+    public ByteString url;
+    public ByteString imageHash;
     
-    public Meme(String description, String url, String imageHash) {
+    public Meme(ByteString description, ByteString url, ByteString imageHash) {
         this.description = description;
         this.url = url;
         this.imageHash = imageHash;
-    }
-
-    public ByteString serialize() {
-        return new ByteString(Helper.toByteArray(description + "," + url + "," + imageHash));
     }
 }
