@@ -3,20 +3,21 @@ package io.neow3j;
 import io.neow3j.compiler.CompilationUnit;
 import io.neow3j.compiler.Compiler;
 import io.neow3j.contract.ContractManagement;
-import io.neow3j.contract.ContractParameter;
 import io.neow3j.contract.GasToken;
-import io.neow3j.contract.Hash160;
-import io.neow3j.contract.Hash256;
 import io.neow3j.contract.NefFile;
 import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
-import io.neow3j.protocol.core.methods.response.ContractManifest;
-import io.neow3j.protocol.core.methods.response.StackItem;
+import io.neow3j.protocol.core.response.ContractManifest;
+import io.neow3j.protocol.core.stackitem.StackItem;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.transaction.exceptions.TransactionConfigurationException;
+import io.neow3j.types.ContractParameter;
+import io.neow3j.types.Hash160;
+import io.neow3j.types.Hash256;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
 
 import java.io.File;
@@ -28,16 +29,17 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import static io.neow3j.contract.ContractParameter.bool;
-import static io.neow3j.contract.ContractParameter.byteArrayFromString;
-import static io.neow3j.contract.ContractParameter.hash160;
-import static io.neow3j.contract.ContractParameter.string;
+import static io.neow3j.NeoTestContainer.getNodeUrl;
 import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
 import static io.neow3j.contract.ContractUtils.writeNefFile;
 import static io.neow3j.contract.SmartContract.getContractHash;
 import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
 import static io.neow3j.transaction.Signer.calledByEntry;
 import static io.neow3j.transaction.Signer.global;
+import static io.neow3j.types.ContractParameter.bool;
+import static io.neow3j.types.ContractParameter.byteArrayFromString;
+import static io.neow3j.types.ContractParameter.hash160;
+import static io.neow3j.types.ContractParameter.string;
 import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
 import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
 import static io.neow3j.wallet.Account.createMultiSigAccount;
@@ -108,9 +110,13 @@ public class IntegrationTest {
     private static final String getOwner = "getOwner";
     private static final String getInitialOwner = "getInitialOwner";
 
+    @ClassRule
+    public static NeoTestContainer neoTestContainer = new NeoTestContainer();
+
     @BeforeClass
     public static void setUp() throws Throwable {
         neow3j = Neow3j.build(new HttpService("http://localhost:40332"));
+        neow3j = Neow3j.build(new HttpService(getNodeUrl(neoTestContainer)));
         compileContracts();
         fundAccounts(defaultAccount, a1, a2, a3, a4, a5, a6, a7, a8);
         memeContract = deployMemeContract();
@@ -346,7 +352,7 @@ public class IntegrationTest {
 
     @Test
     public void testProposeCreation() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testProposeCreation" + N);
+        ContractParameter memeId = byteArrayFromString("testProposeCreation");
         Hash256 hash = basicProposal(memeId, true);
         // Transaction height is 1 higher than the current index that was computed when executing
         // the script.
@@ -369,7 +375,7 @@ public class IntegrationTest {
 
     @Test
     public void testVote() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testVote" + N);
+        ContractParameter memeId = byteArrayFromString("testVote");
         basicProposal(memeId, true);
 
         Hash256 voteFor1 = vote(memeId, a1, true);
@@ -407,7 +413,7 @@ public class IntegrationTest {
 
     @Test
     public void testExecuteCreation() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testExecute" + N);
+        ContractParameter memeId = byteArrayFromString("testExecute");
         String description = "coolDescriptionString";
         String url = "AxLabsUrlString";
         String imgHash = "awesomeImageHashString";
@@ -440,7 +446,7 @@ public class IntegrationTest {
 
     @Test
     public void testExecuteRemoval() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testRemoveMeme" + N);
+        ContractParameter memeId = byteArrayFromString("testRemoveMeme");
         createMemeThroughVote(memeId);
         removeProposal(memeId);
 
@@ -475,7 +481,5 @@ public class IntegrationTest {
                 .getInvocationResult().getException();
         assertThat(exception, containsString("No meme found for this id."));
     }
-
-    private static final String N = "4";
 
 }

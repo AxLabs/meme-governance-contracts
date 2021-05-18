@@ -20,6 +20,7 @@ dependencies {
     implementation 'io.neow3j:compiler:3.10.0'
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation 'junit:junit:4.12'
+    testCompile "org.testcontainers:testcontainers:1.15.2"
 }
 
 neow3jCompiler {
