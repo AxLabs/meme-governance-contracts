@@ -94,16 +94,15 @@ public class IntegrationTest {
     private static final String proposeNewMeme = "proposeNewMeme";
     private static final String proposeRemoval = "proposeRemoval";
     private static final String execute = "execute";
-    private static final String getFinalizationBlock = "getFinalizationBlock";
-    private static final String getVotesFor = "getVotesFor";
-    private static final String getVotesAgainst = "getVotesAgainst";
-    private static final String getTotalVoteCount = "getTotalVoteCount";
     private static final String getVotingTime = "getVotingTime";
-    private static final String isOpenForVoting = "isOpenForVoting";
+    private static final String getMinVotesInFavor = "getMinVotesInFavor";
     private static final String getMemeContract = "getMemeContract";
     private static final String initialize = "initialize";
+    private static final String getProposal = "getProposal";
+    private static final String getProposals = "getProposals";
 
     private static final BigInteger votingTime = BigInteger.TEN;
+    private static final BigInteger minVotesInFavor = new BigInteger("3");
 
     // Meme contract methods
     private static final String getMeme = "getMeme";
@@ -152,26 +151,29 @@ public class IntegrationTest {
     }
 
     @Test
+    public void getMinVotesInFavor() throws IOException {
+        BigInteger minVotes = governanceContract.callFuncReturningInt(getMinVotesInFavor);
+        assertThat(minVotes, is(minVotesInFavor));
+    }
+
+    @Test
     public void testProposeNewMeme() throws Throwable {
         ContractParameter memeId = byteArrayFromString("proposeNewMeme");
         Hash256 hash = setupBasicProposal(memeId, true);
+
+        IntProposal proposal = getProposal(memeId);
+
         // Transaction height is 1 higher than the current index that was computed when executing
         // the script.
-        BigInteger txHeight = neow3j.getTransactionHeight(hash).send().getHeight();
         // Finalization block is the last block any vote is allowed.
-        BigInteger finalizationBlock =
-                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
-        assertThat(finalizationBlock, is(txHeight.add(votingTime).subtract(BigInteger.ONE)));
+        BigInteger txHeight = neow3j.getTransactionHeight(hash).send().getHeight();
+        assertThat(proposal.finalizationBlock,
+                is(txHeight.add(votingTime).subtract(BigInteger.ONE)));
 
-        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
-        boolean isOpen = governanceContract.callFuncReturningBool(isOpenForVoting, memeId);
-
-        assertThat(votes, is(BigInteger.ZERO));
-        assertThat(votesFor, is(BigInteger.ZERO));
-        assertThat(votesAgainst, is(BigInteger.ZERO));
-        assertTrue(isOpen);
+        assertTrue(proposal.create);
+        assertTrue(proposal.voteInProgress);
+        assertThat(proposal.votesInFavor, is(BigInteger.ZERO));
+        assertThat(proposal.votesAgainst, is(BigInteger.ZERO));
     }
 
     @Test
@@ -186,13 +188,10 @@ public class IntegrationTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
+        IntProposal proposal = getProposal(memeId);
 
-        assertThat(votes, is(new BigInteger("3")));
-        assertThat(votesFor, is(new BigInteger("3")));
-        assertThat(votesAgainst, is(BigInteger.ZERO));
+        assertThat(proposal.votesInFavor, is(new BigInteger("3")));
+        assertThat(proposal.votesAgainst, is(BigInteger.ZERO));
 
         Hash256 voteAgainst = vote(memeId, a4, false);
         waitUntilTransactionIsExecuted(voteAgainst, neow3j);
@@ -203,13 +202,9 @@ public class IntegrationTest {
             assertThat(e.getMessage(), containsString("Already voted"));
         }
 
-        votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
-
-        assertThat(votes, is(new BigInteger("4")));
-        assertThat(votesFor, is(new BigInteger("3")));
-        assertThat(votesAgainst, is(BigInteger.ONE));
+        proposal = getProposal(memeId);
+        assertThat(proposal.votesInFavor, is(new BigInteger("3")));
+        assertThat(proposal.votesAgainst, is(BigInteger.ONE));
     }
 
     @Test
@@ -552,9 +547,8 @@ public class IntegrationTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        BigInteger finalizationBlock =
-                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
-        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
+        IntProposal proposal = getProposal(memeId);
+        waitUntilBlockCountIsGreaterThan(neow3j, proposal.finalizationBlock.add(BigInteger.ONE));
 
         Hash256 exec = execProp(memeId, a1);
         waitUntilTransactionIsExecuted(exec, neow3j);
@@ -565,9 +559,64 @@ public class IntegrationTest {
     }
 
     private void waitUntilVotingIsClosed(ContractParameter memeId) throws IOException {
-        BigInteger finalizationBlock =
-                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
-        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
+        waitUntilBlockCountIsGreaterThan(neow3j,
+                getProposal(memeId).finalizationBlock.add(BigInteger.ONE));
+    }
+
+    private static IntProposal getProposal(ContractParameter memeId) throws IOException {
+        List<StackItem> proposalItem = governanceContract
+                .callInvokeFunction("getProposal", asList(memeId))
+                .getInvocationResult().getStack().get(0).getList();
+        IntMeme meme = getMemeFromStackItem(proposalItem.get(0));
+        boolean create = proposalItem.get(1).getBoolean();
+        boolean voteInProgress = proposalItem.get(2).getBoolean();
+        BigInteger finalizationBlock = proposalItem.get(3).getInteger();
+        BigInteger votesInFavor = proposalItem.get(4).getInteger();
+        BigInteger votesAgainst = proposalItem.get(5).getInteger();
+        return new IntProposal(meme, create, voteInProgress, finalizationBlock, votesInFavor,
+                votesAgainst);
+    }
+
+    private static IntMeme getMemeFromStackItem(StackItem memeItem) {
+        List<StackItem> meme = memeItem.getList();
+        String id = meme.get(0).getString();
+        String description = meme.get(1).getString();
+        String url = meme.get(2).getString();
+        String imageHash = meme.get(3).getString();
+        return new IntMeme(id, description, url, imageHash);
+    }
+
+    public static class IntProposal {
+        public IntMeme meme;
+        public Boolean create;
+        public Boolean voteInProgress;
+        public BigInteger finalizationBlock;
+        public BigInteger votesInFavor;
+        public BigInteger votesAgainst;
+
+        public IntProposal(IntMeme meme, Boolean create, Boolean voteInProgress,
+                BigInteger finalizationBlock, BigInteger votesInFavor, BigInteger votesAgainst) {
+            this.meme = meme;
+            this.create = create;
+            this.voteInProgress = voteInProgress;
+            this.finalizationBlock = finalizationBlock;
+            this.votesInFavor = votesInFavor;
+            this.votesAgainst = votesAgainst;
+        }
+    }
+
+    public static class IntMeme {
+        public String id;
+        public String description;
+        public String url;
+        public String imageHash;
+
+        public IntMeme(String id, String description, String url, String imageHash) {
+            this.id = id;
+            this.description = description;
+            this.url = url;
+            this.imageHash = imageHash;
+        }
     }
 
 }

@@ -14,4 +14,5 @@ public class Meme {
         this.url = url;
         this.imageHash = imageHash;
     }
+
 }

@@ -138,6 +138,7 @@ public class MemeContract {
             ByteString desc = DESCRIPTION_MAP.get(memeId);
             ByteString url = URL_MAP.get(memeId);
             ByteString imgHash = IMAGE_HASH_MAP.get(memeId);
+
             memes.add(new Meme(memeId, desc, url, imgHash));
         }
         return memes;
