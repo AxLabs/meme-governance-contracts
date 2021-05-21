@@ -39,6 +39,7 @@ import static io.neow3j.transaction.Signer.global;
 import static io.neow3j.types.ContractParameter.bool;
 import static io.neow3j.types.ContractParameter.byteArrayFromString;
 import static io.neow3j.types.ContractParameter.hash160;
+import static io.neow3j.types.ContractParameter.integer;
 import static io.neow3j.types.ContractParameter.string;
 import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
 import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
@@ -48,7 +49,6 @@ import static java.util.Collections.singletonList;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -91,7 +91,7 @@ public class IntegrationTest {
 
     // Governance methods
     private static final String vote = "vote";
-    private static final String proposeCreation = "proposeCreation";
+    private static final String proposeNewMeme = "proposeNewMeme";
     private static final String proposeRemoval = "proposeRemoval";
     private static final String execute = "execute";
     private static final String getFinalizationBlock = "getFinalizationBlock";
@@ -99,16 +99,16 @@ public class IntegrationTest {
     private static final String getVotesAgainst = "getVotesAgainst";
     private static final String getTotalVoteCount = "getTotalVoteCount";
     private static final String getVotingTime = "getVotingTime";
-    private static final String voteOpen = "voteOpen";
+    private static final String isOpenForVoting = "isOpenForVoting";
     private static final String getMemeContract = "getMemeContract";
-    private static final String setMemeContract = "setMemeContract";
+    private static final String initialize = "initialize";
 
     private static final BigInteger votingTime = BigInteger.TEN;
 
     // Meme contract methods
     private static final String getMeme = "getMeme";
     private static final String getOwner = "getOwner";
-    private static final String getInitialOwner = "getInitialOwner";
+    private static final String getMemes = "getMemes";
 
     @ClassRule
     public static NeoTestContainer neoTestContainer = new NeoTestContainer();
@@ -123,15 +123,258 @@ public class IntegrationTest {
         System.out.println("MemeContract: " + memeContract.getScriptHash());
         governanceContract = deployMemeGovernance();
         System.out.println("MemeGovernance: " + governanceContract.getScriptHash());
-        linkMemeContract();
+        initialize();
     }
 
-    private static void linkMemeContract() throws Throwable {
+    @Test
+    public void testGetOwner() throws IOException {
+        Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getOwner);
+        assertThat(memeOwner, is(governanceContract.getScriptHash()));
+    }
+
+    @Test
+    public void testGetOwner_gov() throws IOException {
+        Hash160 govOwner = governanceContract.callFunctionReturningScriptHash(getOwner);
+        assertThat(govOwner, is(Hash160.ZERO));
+    }
+
+    @Test
+    public void testGetMemeContract() throws IOException {
+        Hash160 linkedMemeContract =
+                governanceContract.callFunctionReturningScriptHash(getMemeContract);
+        assertThat(linkedMemeContract, is(memeContract.getScriptHash()));
+    }
+
+    @Test
+    public void testGetVotingTime() throws IOException {
+        BigInteger votingTime = governanceContract.callFuncReturningInt(getVotingTime);
+        assertThat(votingTime, is(votingTime));
+    }
+
+    @Test
+    public void testProposeNewMeme() throws Throwable {
+        ContractParameter memeId = byteArrayFromString("proposeNewMeme");
+        Hash256 hash = setupBasicProposal(memeId, true);
+        // Transaction height is 1 higher than the current index that was computed when executing
+        // the script.
+        BigInteger txHeight = neow3j.getTransactionHeight(hash).send().getHeight();
+        // Finalization block is the last block any vote is allowed.
+        BigInteger finalizationBlock =
+                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
+        assertThat(finalizationBlock, is(txHeight.add(votingTime).subtract(BigInteger.ONE)));
+
+        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
+        boolean isOpen = governanceContract.callFuncReturningBool(isOpenForVoting, memeId);
+
+        assertThat(votes, is(BigInteger.ZERO));
+        assertThat(votesFor, is(BigInteger.ZERO));
+        assertThat(votesAgainst, is(BigInteger.ZERO));
+        assertTrue(isOpen);
+    }
+
+    @Test
+    public void testVote() throws Throwable {
+        ContractParameter memeId = byteArrayFromString("testVote");
+        setupBasicProposal(memeId, true);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+
+        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
+
+        assertThat(votes, is(new BigInteger("3")));
+        assertThat(votesFor, is(new BigInteger("3")));
+        assertThat(votesAgainst, is(BigInteger.ZERO));
+
+        Hash256 voteAgainst = vote(memeId, a4, false);
+        waitUntilTransactionIsExecuted(voteAgainst, neow3j);
+        try {
+            vote(memeId, a4, false);
+            fail();
+        } catch (TransactionConfigurationException e) {
+            assertThat(e.getMessage(), containsString("Already voted"));
+        }
+
+        votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
+        votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
+        votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
+
+        assertThat(votes, is(new BigInteger("4")));
+        assertThat(votesFor, is(new BigInteger("3")));
+        assertThat(votesAgainst, is(BigInteger.ONE));
+    }
+
+    @Test
+    public void testExecuteCreation() throws Throwable {
+        String memeIdString = "executeCreation";
+        ContractParameter memeId = byteArrayFromString(memeIdString);
+        String description = "coolDescriptionString";
+        String url = "AxLabsUrlString";
+        String imgHash = "awesomeImageHashString";
+        createProposal(memeId, description, url, imgHash);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+
+        waitUntilVotingIsClosed(memeId);
+
+        Hash256 exec = execProp(memeId, a4);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+
+        List<StackItem> meme = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getStack().get(0).getList();
+        assertThat(meme, hasSize(4));
+        assertThat(meme.get(0).getString(), is(memeIdString));
+        assertThat(meme.get(1).getString(), is(description));
+        assertThat(meme.get(2).getString(), is(url));
+        assertThat(meme.get(3).getString(), is(imgHash));
+    }
+
+    @Test
+    public void testExecuteRemoval() throws Throwable {
+        ContractParameter memeId = byteArrayFromString("executeRemoval");
+        createMemeThroughVote(memeId);
+        removeProposal(memeId);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        Hash256 voteFor4 = vote(memeId, a4, true);
+        Hash256 voteFor5 = vote(memeId, a5, true);
+        Hash256 voteAgainst6 = vote(memeId, a6, false);
+        Hash256 voteAgainst7 = vote(memeId, a7, false);
+        Hash256 voteAgainst8 = vote(memeId, a8, false);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+        waitUntilTransactionIsExecuted(voteFor4, neow3j);
+        waitUntilTransactionIsExecuted(voteFor5, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst6, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst7, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst8, neow3j);
+
+        waitUntilVotingIsClosed(memeId);
+
+        Hash256 exec = execProp(memeId, a6);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+
+        String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getException();
+        // Check whether the meme was successfully removed.
+        assertThat(exception, containsString("No meme found for this id."));
+    }
+
+    // Creates a proposal that is not accepted and creates a new proposal with the same meme id.
+    // This should overwrite the existing proposal.
+    @Test
+    public void testOverwriteUnacceptedCreateProposal() throws Throwable {
+        String memeIdString = "overwriteUnacceptedCreateProposal";
+        ContractParameter memeId = byteArrayFromString(memeIdString);
+        createProposal(memeId, "description1", "url1", "imgHash1");
+
+        waitUntilVotingIsClosed(memeId);
+
+        createProposal(memeId, "description2", "url2", "imgHash2");
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+
+        waitUntilVotingIsClosed(memeId);
+
+        Hash256 exec = execProp(memeId, a6);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+
+        List<StackItem> meme = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getStack().get(0).getList();
+        assertThat(meme, hasSize(4));
+        assertThat(meme.get(0).getString(), is(memeIdString));
+        assertThat(meme.get(1).getString(), is("description2"));
+        assertThat(meme.get(2).getString(), is("url2"));
+        assertThat(meme.get(3).getString(), is("imgHash2"));
+    }
+
+    // Creates a proposal that is not accepted and creates a new proposal with the same meme id.
+    // This should overwrite the existing proposal.
+    @Test
+    public void testOverwriteUnacceptedRemoveProposal() throws Throwable {
+        ContractParameter memeId = byteArrayFromString("testOverwriteUnacceptedRemoveProposal");
+        createMemeThroughVote(memeId);
+
+        removeProposal(memeId);
+        waitUntilVotingIsClosed(memeId);
+
+        removeProposal(memeId);
+
+        Hash256 voteFor1 = vote(memeId, a1, true);
+        Hash256 voteFor2 = vote(memeId, a2, true);
+        Hash256 voteFor3 = vote(memeId, a3, true);
+        waitUntilTransactionIsExecuted(voteFor1, neow3j);
+        waitUntilTransactionIsExecuted(voteFor2, neow3j);
+        waitUntilTransactionIsExecuted(voteFor3, neow3j);
+
+        waitUntilVotingIsClosed(memeId);
+
+        Hash256 exec = execProp(memeId, a6);
+        waitUntilTransactionIsExecuted(exec, neow3j);
+
+        String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
+                .getInvocationResult().getException();
+        // Check whether the meme was successfully removed.
+        assertThat(exception, containsString("No meme found for this id."));
+    }
+
+    @Test
+    public void testGetMemes() throws Throwable {
+        ContractParameter memeId1 = byteArrayFromString("getMemes1");
+        ContractParameter memeId2 = byteArrayFromString("getMemes2");
+        ContractParameter memeId3 = byteArrayFromString("getMemes3");
+        ContractParameter memeId4 = byteArrayFromString("getMemes4");
+        createMemeThroughVote(memeId1, "d1", "u1", "i1");
+        createMemeThroughVote(memeId2, "d2", "u2", "i2");
+        createMemeThroughVote(memeId3, "d3", "u3", "i3");
+        createMemeThroughVote(memeId4, "d4", "u4", "i4");
+
+        List<StackItem> memes = memeContract.callInvokeFunction(getMemes, asList(integer(0)))
+                .getInvocationResult().getStack().get(0).getList();
+
+        assertThat(memes, hasSize(4));
+
+        List<StackItem> meme = memes.get(0).getList();
+        assertThat(meme.get(0).getString(), is("getMemes1"));
+        assertThat(meme.get(1).getString(), is("d1"));
+        assertThat(meme.get(2).getString(), is("u1"));
+        assertThat(meme.get(3).getString(), is("i1"));
+
+        meme = memes.get(3).getList();
+        assertThat(meme.get(0).getString(), is("getMemes4"));
+        assertThat(meme.get(1).getString(), is("d4"));
+        assertThat(meme.get(2).getString(), is("u4"));
+        assertThat(meme.get(3).getString(), is("i4"));
+    }
+
+    // Helper methods
+
+    private static void initialize() throws Throwable {
         Hash160 memeContractOnGovernance =
                 governanceContract.callFunctionReturningScriptHash(getMemeContract);
         if (!memeContractOnGovernance.equals(memeContract.getScriptHash())) {
-            System.out.println("setting new meme on gov");
-            Hash256 txHash = governanceContract.invokeFunction(setMemeContract,
+            System.out.println("Initializing");
+            Hash256 txHash = governanceContract.invokeFunction(initialize,
                     hash160(IntegrationTest.memeContract.getScriptHash()))
                     .wallet(committeeWallet)
                     .signers(global(committee))
@@ -245,7 +488,7 @@ public class IntegrationTest {
 
     private Hash256 createProposal(ContractParameter memeId, String description,
             String url, String imgHash) throws Throwable {
-        Hash256 hash = governanceContract.invokeFunction(proposeCreation, memeId,
+        Hash256 hash = governanceContract.invokeFunction(proposeNewMeme, memeId,
                 string(description), string(url), string(imgHash))
                 .wallet(committeeWallet)
                 .signers(calledByEntry(committee))
@@ -269,7 +512,7 @@ public class IntegrationTest {
         return hash;
     }
 
-    private Hash256 basicProposal(ContractParameter memeId, boolean create) throws Throwable {
+    private Hash256 setupBasicProposal(ContractParameter memeId, boolean create) throws Throwable {
         if (create) {
             return createProposal(memeId, "desc", "url", "imgHash");
         } else {
@@ -298,10 +541,8 @@ public class IntegrationTest {
                 .getHash();
     }
 
-    private void createMemeThroughVote(ContractParameter memeId) throws Throwable {
-        String description = "coolDescription";
-        String url = "AxLabsUrl";
-        String imgHash = "awesomeImageHash";
+    private void createMemeThroughVote(ContractParameter memeId, String description, String url,
+            String imgHash) throws Throwable {
         createProposal(memeId, description, url, imgHash);
 
         Hash256 voteFor1 = vote(memeId, a1, true);
@@ -319,167 +560,14 @@ public class IntegrationTest {
         waitUntilTransactionIsExecuted(exec, neow3j);
     }
 
-    @Test
-    public void testGetInitialOwner() throws IOException {
-        Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getInitialOwner);
-        assertThat(memeOwner, is(committee.getScriptHash()));
+    private void createMemeThroughVote(ContractParameter memeId) throws Throwable {
+        createMemeThroughVote(memeId, "coolDescription", "AxLabsUrl", "awesomeImageHash");
     }
 
-    @Test
-    public void testGetOwner() throws IOException {
-        Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getOwner);
-        assertThat(memeOwner, is(governanceContract.getScriptHash()));
-    }
-
-    @Test
-    public void testGetOwner_gov() throws IOException {
-        Hash160 govOwner = governanceContract.callFunctionReturningScriptHash(getOwner);
-        assertThat(govOwner, is(committee.getScriptHash()));
-    }
-
-    @Test
-    public void testGetMemeContract() throws IOException {
-        Hash160 linkedMemeContract =
-                governanceContract.callFunctionReturningScriptHash(getMemeContract);
-        assertThat(linkedMemeContract, is(memeContract.getScriptHash()));
-    }
-
-    @Test
-    public void testGetVotingTime() throws IOException {
-        BigInteger votingTime = governanceContract.callFuncReturningInt(getVotingTime);
-        assertThat(votingTime, is(BigInteger.TEN));
-    }
-
-    @Test
-    public void testProposeCreation() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testProposeCreation");
-        Hash256 hash = basicProposal(memeId, true);
-        // Transaction height is 1 higher than the current index that was computed when executing
-        // the script.
-        BigInteger txHeight = neow3j.getTransactionHeight(hash).send().getHeight();
-        // Finalization block is the last block any vote is allowed.
-        BigInteger finalizationBlock =
-                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
-        assertThat(finalizationBlock, is(txHeight.add(votingTime).subtract(BigInteger.ONE)));
-
-        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
-        boolean open = governanceContract.callFuncReturningBool(voteOpen, memeId);
-
-        assertThat(votes, is(BigInteger.ZERO));
-        assertThat(votesFor, is(BigInteger.ZERO));
-        assertThat(votesAgainst, is(BigInteger.ZERO));
-        assertTrue(open);
-    }
-
-    @Test
-    public void testVote() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testVote");
-        basicProposal(memeId, true);
-
-        Hash256 voteFor1 = vote(memeId, a1, true);
-        Hash256 voteFor2 = vote(memeId, a2, true);
-        Hash256 voteFor3 = vote(memeId, a3, true);
-        waitUntilTransactionIsExecuted(voteFor1, neow3j);
-        waitUntilTransactionIsExecuted(voteFor2, neow3j);
-        waitUntilTransactionIsExecuted(voteFor3, neow3j);
-
-        BigInteger votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        BigInteger votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        BigInteger votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
-
-        assertThat(votes, is(new BigInteger("3")));
-        assertThat(votesFor, is(new BigInteger("3")));
-        assertThat(votesAgainst, is(BigInteger.ZERO));
-
-        Hash256 voteAgainst = vote(memeId, a4, false);
-        waitUntilTransactionIsExecuted(voteAgainst, neow3j);
-        try {
-            vote(memeId, a4, false);
-            fail();
-        } catch (TransactionConfigurationException e) {
-            assertThat(e.getMessage(), containsString("Already voted"));
-        }
-
-        votes = governanceContract.callFuncReturningInt(getTotalVoteCount, memeId);
-        votesFor = governanceContract.callFuncReturningInt(getVotesFor, memeId);
-        votesAgainst = governanceContract.callFuncReturningInt(getVotesAgainst, memeId);
-
-        assertThat(votes, is(new BigInteger("4")));
-        assertThat(votesFor, is(new BigInteger("3")));
-        assertThat(votesAgainst, is(BigInteger.ONE));
-    }
-
-    @Test
-    public void testExecuteCreation() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testExecute");
-        String description = "coolDescriptionString";
-        String url = "AxLabsUrlString";
-        String imgHash = "awesomeImageHashString";
-        createProposal(memeId, description, url, imgHash);
-
-        Hash256 voteFor1 = vote(memeId, a1, true);
-        Hash256 voteFor2 = vote(memeId, a2, true);
-        Hash256 voteFor3 = vote(memeId, a3, true);
-        waitUntilTransactionIsExecuted(voteFor1, neow3j);
-        waitUntilTransactionIsExecuted(voteFor2, neow3j);
-        waitUntilTransactionIsExecuted(voteFor3, neow3j);
-
+    private void waitUntilVotingIsClosed(ContractParameter memeId) throws IOException {
         BigInteger finalizationBlock =
                 governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
         waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
-
-        boolean isOpen = governanceContract.callFuncReturningBool(voteOpen, memeId);
-        assertFalse(isOpen);
-
-        Hash256 exec = execProp(memeId, a4);
-        waitUntilTransactionIsExecuted(exec, neow3j);
-
-        List<StackItem> meme = memeContract.callInvokeFunction(getMeme, asList(memeId))
-                .getInvocationResult().getStack().get(0).getList();
-        assertThat(meme, hasSize(3));
-        assertThat(meme.get(0).getString(), is(description));
-        assertThat(meme.get(1).getString(), is(url));
-        assertThat(meme.get(2).getString(), is(imgHash));
-    }
-
-    @Test
-    public void testExecuteRemoval() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testRemoveMeme");
-        createMemeThroughVote(memeId);
-        removeProposal(memeId);
-
-        Hash256 voteFor1 = vote(memeId, a1, true);
-        Hash256 voteFor2 = vote(memeId, a2, true);
-        Hash256 voteFor3 = vote(memeId, a3, true);
-        Hash256 voteFor4 = vote(memeId, a4, true);
-        Hash256 voteFor5 = vote(memeId, a5, true);
-        Hash256 voteAgainst6 = vote(memeId, a6, false);
-        Hash256 voteAgainst7 = vote(memeId, a7, false);
-        Hash256 voteAgainst8 = vote(memeId, a8, false);
-        waitUntilTransactionIsExecuted(voteFor1, neow3j);
-        waitUntilTransactionIsExecuted(voteFor2, neow3j);
-        waitUntilTransactionIsExecuted(voteFor3, neow3j);
-        waitUntilTransactionIsExecuted(voteFor4, neow3j);
-        waitUntilTransactionIsExecuted(voteFor5, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst6, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst7, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst8, neow3j);
-
-        BigInteger finalizationBlock =
-                governanceContract.callFuncReturningInt(getFinalizationBlock, memeId);
-        waitUntilBlockCountIsGreaterThan(neow3j, finalizationBlock.add(BigInteger.ONE));
-
-        boolean isOpen = governanceContract.callFuncReturningBool(voteOpen, memeId);
-        assertFalse(isOpen);
-
-        Hash256 exec = execProp(memeId, a6);
-        waitUntilTransactionIsExecuted(exec, neow3j);
-
-        String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
-                .getInvocationResult().getException();
-        assertThat(exception, containsString("No meme found for this id."));
     }
 
 }

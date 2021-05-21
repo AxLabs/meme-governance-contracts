@@ -20,7 +20,7 @@
   },
   "ProtocolConfiguration": {
     "Network": 5195086,
-    "MillisecondsPerBlock": 1000,
+    "MillisecondsPerBlock": 100,
     "MaxTraceableBlocks": 2102400,
     "ValidatorsCount": 1,
     "StandbyCommittee": [
