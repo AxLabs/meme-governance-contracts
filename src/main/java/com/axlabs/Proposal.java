@@ -1,4 +1,4 @@
-package io.neow3j;
+package com.axlabs;
 
 public class Proposal {
     public Meme meme;

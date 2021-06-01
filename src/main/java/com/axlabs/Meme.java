@@ -1,4 +1,4 @@
-package io.neow3j;
+package com.axlabs;
 
 import io.neow3j.devpack.ByteString;
 
