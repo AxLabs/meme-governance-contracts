@@ -29,9 +29,6 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.axlabs.MemeContract;
-import com.axlabs.MemeGovernance;
-
 import static com.axlabs.NeoTestContainer.getNodeUrl;
 import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
 import static io.neow3j.contract.ContractUtils.writeNefFile;
