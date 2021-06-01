@@ -1,4 +1,4 @@
-package io.neow3j;
+package com.axlabs;
 
 import org.testcontainers.containers.BindMode;
 import org.testcontainers.containers.GenericContainer;

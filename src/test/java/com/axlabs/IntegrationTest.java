@@ -1,4 +1,4 @@
-package io.neow3j;
+package com.axlabs;
 
 import io.neow3j.compiler.CompilationUnit;
 import io.neow3j.compiler.Compiler;
@@ -32,7 +32,7 @@ import java.util.List;
 import com.axlabs.MemeContract;
 import com.axlabs.MemeGovernance;
 
-import static io.neow3j.NeoTestContainer.getNodeUrl;
+import static com.axlabs.NeoTestContainer.getNodeUrl;
 import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
 import static io.neow3j.contract.ContractUtils.writeNefFile;
 import static io.neow3j.contract.SmartContract.getContractHash;
