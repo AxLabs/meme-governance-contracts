@@ -23,7 +23,6 @@ import io.neow3j.devpack.events.Event2Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 
-@ManifestExtra(key = "name", value = "MemeGovernance")
 @ManifestExtra(key = "author", value = "AxLabs")
 public class MemeGovernance {
 
@@ -68,7 +67,7 @@ public class MemeGovernance {
     public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
             Hash160 initialOwner =
-                    StringLiteralHelper.addressToScriptHash("NXXazKH39yNFWWZF5MJ8tEN98VYHwzn7g3");
+                    StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
             CONTRACT_MAP.put(OWNER_KEY, initialOwner.asByteString());
             CONTRACT_MAP.put(MEME_CONTRACT_KEY, Hash160.zero().asByteString());
         }

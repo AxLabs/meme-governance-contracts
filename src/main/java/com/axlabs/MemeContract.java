@@ -21,7 +21,7 @@ import io.neow3j.devpack.annotations.Safe;
 public class MemeContract {
 
     static Hash160 initialOwner =
-            StringLiteralHelper.addressToScriptHash("NXXazKH39yNFWWZF5MJ8tEN98VYHwzn7g3");
+            StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
     static StorageContext ctx = Storage.getStorageContext();
 
     static final StorageMap OWNER_MAP = ctx.createMap((byte) 1);
@@ -53,9 +53,9 @@ public class MemeContract {
         if (getOwner() != Hash160.zero()) {
             throw new Exception("Already initialized.");
         }
-        if (!Runtime.checkWitness(initialOwner)) {
-            throw new Exception("No authorization.");
-        }
+        // if (!Runtime.checkWitness(initialOwner)) {
+        //     throw new Exception("No authorization.");
+        // }
         Hash160 callingScriptHash = Runtime.getCallingScriptHash();
         OWNER_MAP.put(OWNER_KEY, callingScriptHash.toByteArray());
         return true;
