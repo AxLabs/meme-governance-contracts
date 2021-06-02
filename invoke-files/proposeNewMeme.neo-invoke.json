@@ -1,0 +1,12 @@
+[
+  {
+    "contract": "MemeGovernance",
+    "operation": "proposeNewMeme",
+    "args": [
+      "dGVzdElk",
+      "This is a sample meme",
+      "https://i.imgflip.com/5biubr.jpg",
+      "9f32b8ea4fe0ea67e7d394334ea391ce15c0f8a4f0432bbc84d7d6233911ee4f"
+    ]
+  }
+]
