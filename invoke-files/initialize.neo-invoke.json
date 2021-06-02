@@ -1,0 +1,9 @@
+[
+  {
+    "contract": "MemeGovernance",
+    "operation": "initialize",
+    "args": [
+      "0x7b081b8f1457206ef3d495b85997da198180c90a"
+    ]
+  }
+]
