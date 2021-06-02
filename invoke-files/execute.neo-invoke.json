@@ -1,0 +1,9 @@
+[
+  {
+    "contract": "MemeGovernance",
+    "operation": "execute",
+    "args": [
+      "dGVzdElk"
+    ]
+  }
+]

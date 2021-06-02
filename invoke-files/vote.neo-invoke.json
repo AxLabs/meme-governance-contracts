@@ -7,5 +7,23 @@
       "@Alice",
       "true"
     ]
+  },
+  {
+    "contract": "MemeGovernance",
+    "operation": "vote",
+    "args": [
+      "dGVzdElk",
+      "@Bob",
+      "true"
+    ]
+  },
+  {
+    "contract": "MemeGovernance",
+    "operation": "vote",
+    "args": [
+      "dGVzdElk",
+      "@genesis",
+      "true"
+    ]
   }
 ]
