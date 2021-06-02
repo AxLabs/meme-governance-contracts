@@ -1,0 +1,11 @@
+[
+  {
+    "contract": "MemeGovernance",
+    "operation": "vote",
+    "args": [
+      "dGVzdElk",
+      "@Alice",
+      "true"
+    ]
+  }
+]
