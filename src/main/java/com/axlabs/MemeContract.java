@@ -53,9 +53,9 @@ public class MemeContract {
         if (getOwner() != Hash160.zero()) {
             throw new Exception("Already initialized.");
         }
-        // if (!Runtime.checkWitness(initialOwner)) {
-        //     throw new Exception("No authorization.");
-        // }
+        if (!Runtime.checkWitness(initialOwner)) {
+            throw new Exception("No authorization.");
+        }
         Hash160 callingScriptHash = Runtime.getCallingScriptHash();
         OWNER_MAP.put(OWNER_KEY, callingScriptHash.toByteArray());
         return true;
