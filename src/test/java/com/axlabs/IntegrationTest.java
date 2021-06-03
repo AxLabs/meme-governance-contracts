@@ -99,7 +99,6 @@ public class IntegrationTest {
     private static final String getMemeContract = "getMemeContract";
     private static final String initialize = "initialize";
     private static final String getProposal = "getProposal";
-    private static final String getProposals = "getProposals";
 
     private static final BigInteger votingTime = BigInteger.TEN;
     private static final BigInteger minVotesInFavor = new BigInteger("3");
@@ -565,7 +564,7 @@ public class IntegrationTest {
 
     private static IntProposal getProposal(ContractParameter memeId) throws IOException {
         List<StackItem> proposalItem = governanceContract
-                .callInvokeFunction("getProposal", asList(memeId))
+                .callInvokeFunction(getProposal, asList(memeId))
                 .getInvocationResult().getStack().get(0).getList();
         IntMeme meme = getMemeFromStackItem(proposalItem.get(0));
         boolean create = proposalItem.get(1).getBoolean();
