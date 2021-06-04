@@ -20,6 +20,7 @@ import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.contracts.LedgerContract;
 import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event2Args;
+import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 
@@ -64,7 +65,7 @@ public class MemeGovernance {
      * proposal.
      */
     @OnDeployment
-    public static void deploy(Object data, boolean update) throws Exception {
+    public static void deploy(Object data, boolean update) {
         if (!update) {
             Hash160 initialOwner =
                     StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
@@ -120,7 +121,7 @@ public class MemeGovernance {
     }
 
     @DisplayName("CreationProposal")
-    private static Event5Args<ByteString, String, String, String, Integer> onCreationProposal;
+    private static Event5Args<String, String, String, String, Integer> onCreationProposal;
 
     /**
      * Proposes to create a meme with the provided data.
@@ -130,7 +131,7 @@ public class MemeGovernance {
      * @param imageHash   the hash of the image.
      * @throws Exception if this meme id already exists.
      */
-    public static void proposeNewMeme(ByteString memeId, String description, String url,
+    public static void proposeNewMeme(String memeId, String description, String url,
             String imageHash) throws Exception {
         if (memeExists(memeId)) {
             throw new Exception("There already exists a meme with this id. Propose and execute " +
@@ -152,14 +153,14 @@ public class MemeGovernance {
     }
 
     @DisplayName("RemovalProposal")
-    private static Event2Args<ByteString, Integer> onRemovalProposal;
+    private static Event2Args<String, Integer> onRemovalProposal;
 
     /**
      * This method proposes to remove an existing meme.
      *
      * @param memeId the id of the existing meme that should be removed.
      */
-    public static void proposeRemoval(ByteString memeId) throws Exception {
+    public static void proposeRemoval(String memeId) throws Exception {
         if (!memeExists(memeId)) {
             throw new Exception("No meme with the provided id exists.");
         }
@@ -175,7 +176,7 @@ public class MemeGovernance {
         onRemovalProposal.fire(memeId, finalization);
     }
 
-    private static boolean memeExists(ByteString memeId) {
+    private static boolean memeExists(String memeId) {
         try {
             Contract.call(getMemeContract(), "getMeme", CallFlags.READ_ONLY,
                     new Object[]{memeId});
@@ -185,7 +186,7 @@ public class MemeGovernance {
         return true;
     }
 
-    private static void handleExistingProposal(ByteString memeId) throws Exception {
+    private static void handleExistingProposal(String memeId) throws Exception {
         if (PROPOSAL_MAP.get(memeId) != null) {
             if (voteInProgress(memeId)) {
                 throw new Exception("A proposal is still ongoing for this meme id.");
@@ -201,7 +202,7 @@ public class MemeGovernance {
         }
     }
 
-    private static boolean isAccepted(ByteString memeId) {
+    private static boolean isAccepted(String memeId) {
         int votesFor = VOTE_FOR_MAP.get(memeId).toInteger();
         int votesAgainst = VOTE_AGAINST_MAP.get(memeId).toInteger();
         return votesFor > votesAgainst
@@ -209,7 +210,7 @@ public class MemeGovernance {
     }
 
     @DisplayName("Vote")
-    private static Event1Arg<ByteString> onVote;
+    private static Event3Args<String, ByteString, Boolean> onVote;
 
     /**
      * Votes for or against the proposal of a meme.
@@ -218,7 +219,7 @@ public class MemeGovernance {
      * @param voter   the voter.
      * @param inFavor whether voting in favor of the proposal or against.
      */
-    public static void vote(ByteString memeId, Hash160 voter, boolean inFavor) throws Exception {
+    public static void vote(String memeId, Hash160 voter, boolean inFavor) throws Exception {
         if (!Runtime.checkWitness(voter)) {
             throw new Exception("No valid signature for the provided voter.");
         }
@@ -232,7 +233,7 @@ public class MemeGovernance {
         StorageMap voteMap = ctx.createMap(createVotePrefix(memeId));
         ByteString voterByteString = voter.asByteString();
         ByteString alreadyVoted = voteMap.get(voterByteString);
-        onVote.fire(voterByteString);
+        onVote.fire(memeId, voterByteString, inFavor);
         if (alreadyVoted != null) {
             throw new Exception("Already voted.");
         }
@@ -249,23 +250,23 @@ public class MemeGovernance {
         }
     }
 
-    private static byte[] createVotePrefix(ByteString memeId) {
+    private static byte[] createVotePrefix(String memeId) {
         return Helper.concat(Helper.toByteArray(VOTE_PREFIX), memeId);
     }
 
     @DisplayName("MemeCreation")
-    private static Event4Args<ByteString, String, String, String> onCreation;
+    private static Event4Args<String, String, String, String> onCreation;
 
     @DisplayName("MemeRemoval")
-    private static Event1Arg<ByteString> onRemoval;
+    private static Event1Arg<String> onRemoval;
 
     @DisplayName("UnacceptedProposalRemoval")
-    private static Event1Arg<ByteString> onRemovingUnacceptedProposal;
+    private static Event1Arg<String> onRemovingUnacceptedProposal;
 
     /**
      * Executes a proposal.
      */
-    public static boolean execute(ByteString memeId) throws Exception {
+    public static boolean execute(String memeId) throws Exception {
         ByteString proposal = PROPOSAL_MAP.get(memeId);
         if (proposal == null) {
             throw new Exception("No proposal found for this id.");
@@ -305,14 +306,14 @@ public class MemeGovernance {
         return true;
     }
 
-    private static boolean voteInProgress(ByteString memeId) {
+    private static boolean voteInProgress(String memeId) {
         int currentIndex = LedgerContract.currentIndex();
         int finalizationBlock = FINALIZATION_MAP.get(memeId).toInteger();
         return finalizationBlock >= currentIndex;
     }
 
     // If the proposal was not accepted, there is nothing to execute.
-    private static void clearProposal(ByteString memeId) {
+    private static void clearProposal(String memeId) {
         PROPOSAL_MAP.delete(memeId);
         FINALIZATION_MAP.delete(memeId);
 
@@ -340,7 +341,7 @@ public class MemeGovernance {
      * Gets the proposal for the specified meme id.
      */
     @Safe
-    public static Proposal getProposal(ByteString memeId) {
+    public static Proposal getProposal(String memeId) {
         boolean create = PROPOSAL_MAP.get(memeId).toInteger() == CREATE;
         boolean voteInProgress = voteInProgress(memeId);
         int finalizationBlock = FINALIZATION_MAP.get(memeId).toInteger();
@@ -351,7 +352,7 @@ public class MemeGovernance {
             ByteString description = DESCRIPTION_MAP.get(memeId);
             ByteString url = URL_MAP.get(memeId);
             ByteString imageUrl = IMAGE_HASH_MAP.get(memeId);
-            Meme meme = new Meme(memeId, description, url, imageUrl);
+            Meme meme = new Meme(new ByteString(memeId), description, url, imageUrl);
             return new Proposal(meme, true, voteInProgress, finalizationBlock, votesInFavor,
                     votesAgainst);
         } else {
@@ -381,7 +382,7 @@ public class MemeGovernance {
                 break;
             }
             Iterator.Struct<ByteString, ByteString> pair = iterator.get();
-            ByteString memeId = pair.key;
+            String memeId = pair.key.toString();
             Proposal proposal = getProposal(memeId);
             proposals.add(proposal);
         }

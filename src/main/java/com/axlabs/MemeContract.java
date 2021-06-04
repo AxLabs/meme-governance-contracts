@@ -72,7 +72,7 @@ public class MemeContract {
     /**
      * Creates a meme.
      */
-    public static boolean createMeme(ByteString memeId, String description, String url,
+    public static boolean createMeme(String memeId, String description, String url,
             String imageHash) {
         if (memeId == null || description == null || url == null || imageHash == null) {
             return false;
@@ -93,7 +93,7 @@ public class MemeContract {
     /**
      * Removes a meme.
      */
-    public static boolean removeMeme(ByteString memeId) {
+    public static boolean removeMeme(String memeId) {
         if (!Runtime.checkWitness(getOwner())) {
             return false;
         }
@@ -108,14 +108,14 @@ public class MemeContract {
      * Gets the properties of a meme.
      */
     @Safe
-    public static Meme getMeme(ByteString memeId) throws Exception {
+    public static Meme getMeme(String memeId) throws Exception {
         if (REGISTRY_MAP.get(memeId) == null) {
             throw new Exception("No meme found for this id.");
         }
         ByteString desc = DESCRIPTION_MAP.get(memeId);
         ByteString url = URL_MAP.get(memeId);
         ByteString imgHash = IMAGE_HASH_MAP.get(memeId);
-        return new Meme(memeId, desc, url, imgHash);
+        return new Meme(new ByteString(memeId), desc, url, imgHash);
     }
 
     @Safe
