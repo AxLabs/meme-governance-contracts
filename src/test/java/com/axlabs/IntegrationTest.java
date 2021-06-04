@@ -37,7 +37,6 @@ import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
 import static io.neow3j.transaction.Signer.calledByEntry;
 import static io.neow3j.transaction.Signer.global;
 import static io.neow3j.types.ContractParameter.bool;
-import static io.neow3j.types.ContractParameter.byteArrayFromString;
 import static io.neow3j.types.ContractParameter.hash160;
 import static io.neow3j.types.ContractParameter.integer;
 import static io.neow3j.types.ContractParameter.string;
@@ -157,7 +156,7 @@ public class IntegrationTest {
 
     @Test
     public void testProposeNewMeme() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("proposeNewMeme");
+        ContractParameter memeId = string("proposeNewMeme");
         Hash256 hash = setupBasicProposal(memeId, true);
 
         IntProposal proposal = getProposal(memeId);
@@ -177,7 +176,7 @@ public class IntegrationTest {
 
     @Test
     public void testVote() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testVote");
+        ContractParameter memeId = string("testVote");
         setupBasicProposal(memeId, true);
 
         Hash256 voteFor1 = vote(memeId, a1, true);
@@ -209,7 +208,7 @@ public class IntegrationTest {
     @Test
     public void testExecuteCreation() throws Throwable {
         String memeIdString = "executeCreation";
-        ContractParameter memeId = byteArrayFromString(memeIdString);
+        ContractParameter memeId = string(memeIdString);
         String description = "coolDescriptionString";
         String url = "AxLabsUrlString";
         String imgHash = "awesomeImageHashString";
@@ -238,7 +237,7 @@ public class IntegrationTest {
 
     @Test
     public void testExecuteRemoval() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("executeRemoval");
+        ContractParameter memeId = string("executeRemoval");
         createMemeThroughVote(memeId);
         removeProposal(memeId);
 
@@ -275,7 +274,7 @@ public class IntegrationTest {
     @Test
     public void testOverwriteUnacceptedCreateProposal() throws Throwable {
         String memeIdString = "overwriteUnacceptedCreateProposal";
-        ContractParameter memeId = byteArrayFromString(memeIdString);
+        ContractParameter memeId = string(memeIdString);
         createProposal(memeId, "description1", "url1", "imgHash1");
 
         waitUntilVotingIsClosed(memeId);
@@ -306,7 +305,7 @@ public class IntegrationTest {
     // This should overwrite the existing proposal.
     @Test
     public void testOverwriteUnacceptedRemoveProposal() throws Throwable {
-        ContractParameter memeId = byteArrayFromString("testOverwriteUnacceptedRemoveProposal");
+        ContractParameter memeId = string("testOverwriteUnacceptedRemoveProposal");
         createMemeThroughVote(memeId);
 
         removeProposal(memeId);
@@ -334,10 +333,10 @@ public class IntegrationTest {
 
     @Test
     public void testGetMemes() throws Throwable {
-        ContractParameter memeId1 = byteArrayFromString("getMemes1");
-        ContractParameter memeId2 = byteArrayFromString("getMemes2");
-        ContractParameter memeId3 = byteArrayFromString("getMemes3");
-        ContractParameter memeId4 = byteArrayFromString("getMemes4");
+        ContractParameter memeId1 = string("getMemes1");
+        ContractParameter memeId2 = string("getMemes2");
+        ContractParameter memeId3 = string("getMemes3");
+        ContractParameter memeId4 = string("getMemes4");
         createMemeThroughVote(memeId1, "d1", "u1", "i1");
         createMemeThroughVote(memeId2, "d2", "u2", "i2");
         createMemeThroughVote(memeId3, "d3", "u3", "i3");
@@ -371,7 +370,7 @@ public class IntegrationTest {
             Hash256 txHash = governanceContract.invokeFunction(initialize,
                     hash160(IntegrationTest.memeContract.getScriptHash()))
                     .wallet(committeeWallet)
-                    .signers(global(committee))
+                    .signers(global(defaultAccount))
                     .sign()
                     .send()
                     .getSendRawTransaction()
