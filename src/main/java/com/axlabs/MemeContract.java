@@ -20,11 +20,9 @@ import io.neow3j.devpack.annotations.Safe;
 @DisplayName("Memes")
 public class MemeContract {
 
-    static Hash160 initialOwner =
-            StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
     static StorageContext ctx = Storage.getStorageContext();
 
-    static final StorageMap OWNER_MAP = ctx.createMap((byte) 1);
+    static final StorageMap CONTRACT_MAP = ctx.createMap((byte) 1);
     static final byte[] OWNER_KEY = Helper.toByteArray("0d");
 
     static final byte[] REGISTRY_PREFIX = Helper.toByteArray((byte) 2);
@@ -33,12 +31,14 @@ public class MemeContract {
     static final StorageMap URL_MAP = ctx.createMap((byte) 4);
     static final StorageMap IMAGE_HASH_MAP = ctx.createMap((byte) 5);
 
-    static final int MAX_GET_MEMES = 8;
+    static final int MAX_GET_MEMES = 100;
 
     @OnDeployment
     public static void deploy(Object data, boolean update) {
         if (!update) {
-            OWNER_MAP.put(OWNER_KEY, Hash160.zero().toByteArray());
+            Hash160 initialOwner =
+                    StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
+            CONTRACT_MAP.put(OWNER_KEY, initialOwner.asByteString());
         }
     }
 
@@ -48,16 +48,11 @@ public class MemeContract {
      * This method is intended to be called from the governance contract.
      */
     public static boolean initialize() throws Exception {
-        // Restricts to set the owner (governance contract) only once to ensure its decentralized
-        // aspect.
-        if (getOwner() != Hash160.zero()) {
-            throw new Exception("Already initialized.");
-        }
-        if (!Runtime.checkWitness(initialOwner)) {
-            throw new Exception("No authorization.");
+        if (!Runtime.checkWitness(getOwner())) {
+            return false;
         }
         Hash160 callingScriptHash = Runtime.getCallingScriptHash();
-        OWNER_MAP.put(OWNER_KEY, callingScriptHash.toByteArray());
+        CONTRACT_MAP.put(OWNER_KEY, callingScriptHash.toByteArray());
         return true;
     }
 
@@ -66,7 +61,7 @@ public class MemeContract {
      */
     @Safe
     public static Hash160 getOwner() {
-        return new Hash160(OWNER_MAP.get(OWNER_KEY));
+        return new Hash160(CONTRACT_MAP.get(OWNER_KEY));
     }
 
     /**
@@ -77,7 +72,7 @@ public class MemeContract {
         if (memeId == null || description == null || url == null || imageHash == null) {
             return false;
         }
-        if (!Runtime.checkWitness(getOwner())) {
+        if (Runtime.getCallingScriptHash() != getOwner()) {
             return false;
         }
         if (REGISTRY_MAP.get(memeId) != null) {
@@ -94,7 +89,7 @@ public class MemeContract {
      * Removes a meme.
      */
     public static boolean removeMeme(String memeId) {
-        if (!Runtime.checkWitness(getOwner())) {
+        if (Runtime.getCallingScriptHash() != getOwner()) {
             return false;
         }
         REGISTRY_MAP.delete(memeId);

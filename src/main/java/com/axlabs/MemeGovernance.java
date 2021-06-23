@@ -27,22 +27,17 @@ import io.neow3j.devpack.events.Event5Args;
 @ManifestExtra(key = "author", value = "AxLabs")
 public class MemeGovernance {
 
-    static final ByteString OWNER_KEY = StringLiteralHelper.hexToBytes("0x01");
-    static final ByteString MEME_CONTRACT_KEY = StringLiteralHelper.hexToBytes("0x02");
-
-    static final int REMOVE = 0;
-    static final int CREATE = 1;
-
-    static final int VOTING_TIME = 10;
-    static final int MIN_VOTES_IN_FAVOR = 3;
-    static final int MAX_GET_PROPOSALS = 10;
-
     static StorageContext ctx = Storage.getStorageContext();
     static final StorageMap CONTRACT_MAP = ctx.createMap((byte) 8);
+
+    static final ByteString OWNER_KEY = StringLiteralHelper.hexToBytes("0x01");
+    static final ByteString MEME_CONTRACT_KEY = StringLiteralHelper.hexToBytes("0x02");
 
     static final byte[] PROPOSAL_PREFIX = Helper.toByteArray((byte) 12);
     static final StorageMap PROPOSAL_MAP = ctx.createMap(PROPOSAL_PREFIX);
 
+    // The vote maps keep track of the votes for a proposal.
+    // This includes the total vote count, the votes in favor and the votes against.
     static final byte VOTE_PREFIX = (byte) 16;
     static final StorageMap VOTE_COUNT_MAP = ctx.createMap((byte) 17);
     static final StorageMap VOTE_FOR_MAP = ctx.createMap((byte) 18);
@@ -58,6 +53,13 @@ public class MemeGovernance {
      * at a time.
      */
     static final StorageMap FINALIZATION_MAP = ctx.createMap((byte) 32);
+
+    static final int REMOVE = 0;
+    static final int CREATE = 1;
+
+    static final int VOTING_TIME = 10;
+    static final int MIN_VOTES_IN_FAVOR = 3;
+    static final int MAX_GET_PROPOSALS = 100;
 
     /**
      * Stores the last block on which a proposal can be safely executed.
@@ -88,7 +90,9 @@ public class MemeGovernance {
         if (!Runtime.checkWitness(getOwner())) {
             throw new Exception("No authorization.");
         }
-        boolean initialize = (boolean) Contract.call(memeContract, "initialize", CallFlags.STATES,
+        boolean initialize = (boolean) Contract.call(memeContract,
+                "initialize",
+                CallFlags.STATES,
                 new Object[]{});
         if (initialize) {
             CONTRACT_MAP.put(MEME_CONTRACT_KEY, memeContract.asByteString());

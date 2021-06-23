@@ -9,7 +9,7 @@ import org.testcontainers.utility.MountableFile;
 public class NeoTestContainer extends GenericContainer<NeoTestContainer> {
 
     static final String N3_PRIVATE_NET_CONTAINER_IMG =
-            "ghcr.io/axlabs/neo3-privatenet-docker/neo-cli-with-plugins:rc2-latest";
+            "ghcr.io/axlabs/neo3-privatenet-docker/neo-cli-with-plugins:rc3-latest";
 
     static final String CONFIG_FILE_SOURCE = "/node-config/config.json";
     static final String CONFIG_FILE_DESTINATION = "/neo-cli/config.json";

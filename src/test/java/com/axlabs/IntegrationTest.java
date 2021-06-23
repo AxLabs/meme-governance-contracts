@@ -10,6 +10,7 @@ import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.core.stackitem.StackItem;
 import io.neow3j.protocol.http.HttpService;
+import io.neow3j.transaction.Signer;
 import io.neow3j.transaction.exceptions.TransactionConfigurationException;
 import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
@@ -35,7 +36,7 @@ import static io.neow3j.contract.ContractUtils.writeNefFile;
 import static io.neow3j.contract.SmartContract.getContractHash;
 import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
 import static io.neow3j.transaction.Signer.calledByEntry;
-import static io.neow3j.transaction.Signer.global;
+import static io.neow3j.transaction.Signer.feeOnly;
 import static io.neow3j.types.ContractParameter.bool;
 import static io.neow3j.types.ContractParameter.hash160;
 import static io.neow3j.types.ContractParameter.integer;
@@ -370,7 +371,11 @@ public class IntegrationTest {
             Hash256 txHash = governanceContract.invokeFunction(initialize,
                     hash160(IntegrationTest.memeContract.getScriptHash()))
                     .wallet(committeeWallet)
-                    .signers(global(defaultAccount))
+                    .signers(new Signer.Builder().account(defaultAccount)
+                            .allowedContracts(governanceContract.getScriptHash(),
+                                    memeContract.getScriptHash())
+                            .build()
+                    )
                     .sign()
                     .send()
                     .getSendRawTransaction()
@@ -436,7 +441,7 @@ public class IntegrationTest {
         try {
             Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest)
                     .wallet(committeeWallet)
-                    .signers(calledByEntry(committee))
+                    .signers(feeOnly(committee))
                     .sign()
                     .send()
                     .getSendRawTransaction()
@@ -463,7 +468,7 @@ public class IntegrationTest {
         try {
             Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest)
                     .wallet(committeeWallet)
-                    .signers(calledByEntry(committee))
+                    .signers(feeOnly(committee))
                     .sign()
                     .send()
                     .getSendRawTransaction()
@@ -484,7 +489,7 @@ public class IntegrationTest {
         Hash256 hash = governanceContract.invokeFunction(proposeNewMeme, memeId,
                 string(description), string(url), string(imgHash))
                 .wallet(committeeWallet)
-                .signers(calledByEntry(committee))
+                .signers(feeOnly(committee))
                 .sign()
                 .send()
                 .getSendRawTransaction()
@@ -496,7 +501,7 @@ public class IntegrationTest {
     private Hash256 removeProposal(ContractParameter memeId) throws Throwable {
         Hash256 hash = governanceContract.invokeFunction(proposeRemoval, memeId)
                 .wallet(committeeWallet)
-                .signers(calledByEntry(committee))
+                .signers(feeOnly(committee))
                 .sign()
                 .send()
                 .getSendRawTransaction()
@@ -527,7 +532,7 @@ public class IntegrationTest {
     private Hash256 execProp(ContractParameter memeId, Account a) throws Throwable {
         return governanceContract.invokeFunction(execute, memeId)
                 .wallet(wallet)
-                .signers(global(a))
+                .signers(feeOnly(a))
                 .sign()
                 .send()
                 .getSendRawTransaction()
