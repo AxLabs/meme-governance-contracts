@@ -1,7 +1,6 @@
 package com.axlabs;
 
 import io.neow3j.devpack.ByteString;
-import io.neow3j.devpack.FindOptions;
 import io.neow3j.devpack.Hash160;
 import io.neow3j.devpack.Helper;
 import io.neow3j.devpack.Iterator;
@@ -15,6 +14,7 @@ import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.constants.FindOptions;
 
 @ManifestExtra(key = "author", value = "AxLabs")
 @DisplayName("Memes")
@@ -37,8 +37,8 @@ public class MemeContract {
     public static void deploy(Object data, boolean update) {
         if (!update) {
             Hash160 initialOwner =
-                    StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
-            CONTRACT_MAP.put(OWNER_KEY, initialOwner.asByteString());
+                    StringLiteralHelper.addressToScriptHash("NXXazKH39yNFWWZF5MJ8tEN98VYHwzn7g3");
+            CONTRACT_MAP.put(OWNER_KEY, initialOwner.toByteString());
         }
     }
 

@@ -33,7 +33,7 @@ import java.util.List;
 import static com.axlabs.NeoTestContainer.getNodeUrl;
 import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
 import static io.neow3j.contract.ContractUtils.writeNefFile;
-import static io.neow3j.contract.SmartContract.getContractHash;
+import static io.neow3j.contract.SmartContract.calcContractHash;
 import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
 import static io.neow3j.transaction.Signer.calledByEntry;
 import static io.neow3j.transaction.Signer.feeOnly;
@@ -121,19 +121,12 @@ public class IntegrationTest {
         System.out.println("MemeContract: " + memeContract.getScriptHash());
         governanceContract = deployMemeGovernance();
         System.out.println("MemeGovernance: " + governanceContract.getScriptHash());
-        initialize();
     }
 
     @Test
     public void testGetOwner() throws IOException {
         Hash160 memeOwner = memeContract.callFunctionReturningScriptHash(getOwner);
         assertThat(memeOwner, is(governanceContract.getScriptHash()));
-    }
-
-    @Test
-    public void testGetOwner_gov() throws IOException {
-        Hash160 govOwner = governanceContract.callFunctionReturningScriptHash(getOwner);
-        assertThat(govOwner, is(Hash160.ZERO));
     }
 
     @Test
@@ -363,33 +356,6 @@ public class IntegrationTest {
 
     // Helper methods
 
-    private static void initialize() throws Throwable {
-        Hash160 memeContractOnGovernance =
-                governanceContract.callFunctionReturningScriptHash(getMemeContract);
-        if (!memeContractOnGovernance.equals(memeContract.getScriptHash())) {
-            System.out.println("Initializing");
-            Hash256 txHash = governanceContract.invokeFunction(initialize,
-                    hash160(IntegrationTest.memeContract.getScriptHash()))
-                    .wallet(committeeWallet)
-                    .signers(new Signer.Builder().account(defaultAccount)
-                            .allowedContracts(governanceContract.getScriptHash(),
-                                    memeContract.getScriptHash())
-                            .build()
-                    )
-                    .sign()
-                    .send()
-                    .getSendRawTransaction()
-                    .getHash();
-            waitUntilTransactionIsExecuted(txHash, neow3j);
-        }
-        memeContractOnGovernance =
-                governanceContract.callFunctionReturningScriptHash(getMemeContract);
-        System.out.println(
-                "Meme contract hash on governance contract: " + memeContractOnGovernance);
-        Hash160 ownerOnMeme = memeContract.callFunctionReturningScriptHash(getOwner);
-        System.out.println("Owner of Meme contract: " + ownerOnMeme);
-    }
-
     private static void compileContracts() throws IOException {
         compileContract(MemeContract.class.getCanonicalName());
         compileContract(MemeGovernance.class.getCanonicalName());
@@ -452,7 +418,7 @@ public class IntegrationTest {
             System.out.println(e.getMessage());
         }
         return new SmartContract(
-                getContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
+                calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
                         manifest.getName()),
                 neow3j);
     }
@@ -466,9 +432,12 @@ public class IntegrationTest {
                 .readValue(manifestFile, ContractManifest.class);
 
         try {
-            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest)
+            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest,
+                    hash160(memeContract.getScriptHash()))
                     .wallet(committeeWallet)
-                    .signers(feeOnly(committee))
+                    .signers(new Signer.Builder().account(committee)
+                            .allowedContracts(memeContract.getScriptHash())
+                            .build())
                     .sign()
                     .send()
                     .getSendRawTransaction()
@@ -479,7 +448,7 @@ public class IntegrationTest {
             System.out.println(e.getMessage());
         }
         return new SmartContract(
-                getContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
+                calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
                         manifest.getName()),
                 neow3j);
     }

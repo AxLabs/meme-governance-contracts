@@ -1,9 +1,7 @@
 package com.axlabs;
 
 import io.neow3j.devpack.ByteString;
-import io.neow3j.devpack.CallFlags;
 import io.neow3j.devpack.Contract;
-import io.neow3j.devpack.FindOptions;
 import io.neow3j.devpack.Hash160;
 import io.neow3j.devpack.Helper;
 import io.neow3j.devpack.Iterator;
@@ -16,7 +14,10 @@ import io.neow3j.devpack.StringLiteralHelper;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
+import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
+import io.neow3j.devpack.constants.CallFlags;
+import io.neow3j.devpack.constants.FindOptions;
 import io.neow3j.devpack.contracts.LedgerContract;
 import io.neow3j.devpack.events.Event1Arg;
 import io.neow3j.devpack.events.Event2Args;
@@ -25,13 +26,13 @@ import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 
 @ManifestExtra(key = "author", value = "AxLabs")
+@Permission(contract = "*")
 public class MemeGovernance {
 
     static StorageContext ctx = Storage.getStorageContext();
     static final StorageMap CONTRACT_MAP = ctx.createMap((byte) 8);
 
-    static final ByteString OWNER_KEY = StringLiteralHelper.hexToBytes("0x01");
-    static final ByteString MEME_CONTRACT_KEY = StringLiteralHelper.hexToBytes("0x02");
+    static final ByteString MEME_CONTRACT_KEY = StringLiteralHelper.hexToBytes("0x01");
 
     static final byte[] PROPOSAL_PREFIX = Helper.toByteArray((byte) 12);
     static final StorageMap PROPOSAL_MAP = ctx.createMap(PROPOSAL_PREFIX);
@@ -61,42 +62,33 @@ public class MemeGovernance {
     static final int MIN_VOTES_IN_FAVOR = 3;
     static final int MAX_GET_PROPOSALS = 100;
 
+    @DisplayName("deployEvent")
+    private static Event1Arg<Hash160> onDeploy;
+
     /**
      * Stores the last block on which a proposal can be safely executed.
      * After this block has passed, other proposals may overwrite the proposals id with a new
      * proposal.
      */
     @OnDeployment
-    public static void deploy(Object data, boolean update) {
+    public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
-            Hash160 initialOwner =
-                    StringLiteralHelper.addressToScriptHash("NM7Aky765FG8NhhwtxjXRx7jEL1cnw7PBP");
-            CONTRACT_MAP.put(OWNER_KEY, initialOwner.asByteString());
-            CONTRACT_MAP.put(MEME_CONTRACT_KEY, Hash160.zero().asByteString());
+            initialize((Hash160) data);
         }
-    }
-
-    /**
-     * Gets the owner of this contract.
-     */
-    public static Hash160 getOwner() {
-        return new Hash160(CONTRACT_MAP.get(OWNER_KEY));
     }
 
     /**
      * Initializes the link to the underlying MemeContract and removes this contract's user.
      */
-    public static void initialize(Hash160 memeContract) throws Exception {
-        if (!Runtime.checkWitness(getOwner())) {
-            throw new Exception("No authorization.");
-        }
+    private static void initialize(Hash160 memeContract) throws Exception {
         boolean initialize = (boolean) Contract.call(memeContract,
                 "initialize",
-                CallFlags.STATES,
+                CallFlags.States,
                 new Object[]{});
         if (initialize) {
-            CONTRACT_MAP.put(MEME_CONTRACT_KEY, memeContract.asByteString());
-            CONTRACT_MAP.put(OWNER_KEY, Hash160.zero().asByteString());
+            CONTRACT_MAP.put(MEME_CONTRACT_KEY, memeContract.toByteString());
+        } else {
+            throw new Exception("Could not initialize.");
         }
     }
 
@@ -182,7 +174,7 @@ public class MemeGovernance {
 
     private static boolean memeExists(String memeId) {
         try {
-            Contract.call(getMemeContract(), "getMeme", CallFlags.READ_ONLY,
+            Contract.call(getMemeContract(), "getMeme", CallFlags.ReadOnly,
                     new Object[]{memeId});
         } catch (Exception e) {
             return false;
@@ -235,7 +227,7 @@ public class MemeGovernance {
         }
 
         StorageMap voteMap = ctx.createMap(createVotePrefix(memeId));
-        ByteString voterByteString = voter.asByteString();
+        ByteString voterByteString = voter.toByteString();
         ByteString alreadyVoted = voteMap.get(voterByteString);
         onVote.fire(memeId, voterByteString, inFavor);
         if (alreadyVoted != null) {
@@ -288,7 +280,7 @@ public class MemeGovernance {
                 String url = URL_MAP.get(memeId).toString();
                 String imageHash = IMAGE_HASH_MAP.get(memeId).toString();
                 boolean createMeme = (boolean) Contract.call(getMemeContract(), "createMeme",
-                        CallFlags.ALL, new Object[]{memeId, description, url, imageHash});
+                        CallFlags.All, new Object[]{memeId, description, url, imageHash});
                 if (createMeme) {
                     onCreation.fire(memeId, description, url, imageHash);
                     clearProposal(memeId);
@@ -296,7 +288,7 @@ public class MemeGovernance {
                 }
             } else {
                 boolean removeMeme = (boolean) Contract.call(getMemeContract(), "removeMeme",
-                        CallFlags.ALL, new Object[]{memeId});
+                        CallFlags.All, new Object[]{memeId});
                 if (removeMeme) {
                     onRemoval.fire(memeId);
                     clearProposal(memeId);
@@ -360,7 +352,7 @@ public class MemeGovernance {
             return new Proposal(meme, true, voteInProgress, finalizationBlock, votesInFavor,
                     votesAgainst);
         } else {
-            Meme meme = (Meme) Contract.call(getMemeContract(), "getMeme", CallFlags.READ_ONLY,
+            Meme meme = (Meme) Contract.call(getMemeContract(), "getMeme", CallFlags.ReadOnly,
                     new Object[]{memeId});
             return new Proposal(meme, false, voteInProgress, finalizationBlock, votesInFavor,
                     votesAgainst);

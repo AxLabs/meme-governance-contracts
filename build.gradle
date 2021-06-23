@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'io.neow3j.gradle-plugin' version '3.10.0'
+    id 'io.neow3j.gradle-plugin' version '3.11.2'
 }
 
 group 'com.axlabs'
@@ -14,9 +14,9 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.neow3j:contract:3.10.0'
-    implementation 'io.neow3j:devpack:3.10.0'
-    implementation 'io.neow3j:compiler:3.10.0'
+    implementation 'io.neow3j:contract:3.11.2'
+    implementation 'io.neow3j:devpack:3.11.2'
+    implementation 'io.neow3j:compiler:3.11.2'
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation 'junit:junit:4.12'
     testCompile "org.testcontainers:testcontainers:1.15.2"
