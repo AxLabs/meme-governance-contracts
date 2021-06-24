@@ -186,14 +186,10 @@ public class MemeGovernance {
         if (PROPOSAL_MAP.get(memeId) != null) {
             if (voteInProgress(memeId)) {
                 throw new Exception("A proposal is still ongoing for this meme id.");
-            } else {
-                if (isAccepted(memeId)) {
-                    throw new Exception("This proposal was accepted and needs to be executed " +
-                            "before creating a new proposal for this meme id.");
-                } else {
-                    onRemovingUnacceptedProposal.fire(memeId);
-                    clearProposal(memeId);
-                }
+            }
+            if (isAccepted(memeId)) {
+                throw new Exception("This proposal was accepted and needs to be executed " +
+                        "before creating a new proposal for this meme id.");
             }
         }
     }
