@@ -30,33 +30,30 @@ import io.neow3j.devpack.events.Event5Args;
 @Permission(contract = "*")
 public class GovernanceContract {
 
+    static final byte[] MEME_CONTRACT_KEY = new byte[]{0x01};
+    static final int REMOVE = 0;
+    static final int CREATE = 1;
+    static final int VOTING_TIME = 10;
+    static final int MIN_VOTES_IN_FAVOR = 3;
+    static final int MAX_GET_PROPOSALS = 100;
+    static final byte PROPOSAL_PREFIX = 2; // prefix for proposal map
+    // The "pre-prefix" for the voter map. Is combined with the memeId for a map prefix.
+    static final byte VOTER_MAP_PREPREFIX = 3; 
+
     static final StorageContext ctx = Storage.getStorageContext();
     static final StorageMap contractMap = ctx.createMap((byte) 1);
-
-    static final ByteString MEME_CONTRACT_KEY = StringLiteralHelper.hexToBytes("0x01");
-
-    static final byte PROPOSAL_PREFIX = 2;
     static final StorageMap proposalMap = ctx.createMap(PROPOSAL_PREFIX);
-
-    static final byte VOTE_PREFIX = 3;
     static final StorageMap voteCountMap = ctx.createMap((byte) 4);
     static final StorageMap voteForMap = ctx.createMap((byte) 5);
     static final StorageMap voteAgainstMap = ctx.createMap((byte) 6);
 
-    // Memes 
+    // Memes data
     static final StorageMap descriptionMap = ctx.createMap((byte) 7);
     static final StorageMap urlMap = ctx.createMap((byte) 8);
     static final StorageMap imgHashMap = ctx.createMap((byte) 9);
 
     // Stores the vote deadline block number for proposals. 
     static final StorageMap finalizationMap = ctx.createMap((byte) 10);
-
-    static final int REMOVE = 0;
-    static final int CREATE = 1;
-
-    static final int VOTING_TIME = 10;
-    static final int MIN_VOTES_IN_FAVOR = 3;
-    static final int MAX_GET_PROPOSALS = 100;
 
     @DisplayName("deployEvent")
     private static Event1Arg<Hash160> onDeploy;
@@ -216,11 +213,11 @@ public class GovernanceContract {
         StorageMap voteMap = ctx.createMap(createVotePrefix(memeId));
         ByteString voterByteString = voter.toByteString();
         ByteString alreadyVoted = voteMap.get(voterByteString);
-        onVote.fire(memeId, voterByteString, inFavor);
         if (alreadyVoted != null) {
             throw new Exception("Already voted.");
         }
         voteMap.put(voterByteString, 1);
+        onVote.fire(memeId, voterByteString, inFavor);
 
         int currentVotes = voteCountMap.get(memeId).toInteger();
         voteCountMap.put(memeId, currentVotes + 1);
@@ -234,7 +231,7 @@ public class GovernanceContract {
     }
 
     private static byte[] createVotePrefix(String memeId) {
-        return Helper.concat(Helper.toByteArray(VOTE_PREFIX), memeId);
+        return Helper.concat(Helper.toByteArray(VOTER_MAP_PREPREFIX), memeId);
     }
 
     @DisplayName("MemeCreation")
@@ -295,7 +292,6 @@ public class GovernanceContract {
         return finalizationBlock >= currentIndex;
     }
 
-    // If the proposal was not accepted, there is nothing to execute.
     private static void clearProposal(String memeId) {
         proposalMap.delete(memeId);
         finalizationMap.delete(memeId);
@@ -305,8 +301,7 @@ public class GovernanceContract {
         Iterator<Iterator.Struct<ByteString, ByteString>> iterator =
                 Storage.find(ctx, voteMapPrefix, FindOptions.RemovePrefix);
         while (iterator.next()) {
-            Iterator.Struct<ByteString, ByteString> pair = iterator.get();
-            voteMap.delete(pair.key);
+            voteMap.delete(iterator.get().key);
         }
 
         voteCountMap.delete(memeId);

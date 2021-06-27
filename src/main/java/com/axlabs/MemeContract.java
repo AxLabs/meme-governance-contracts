@@ -17,17 +17,16 @@ import static io.neow3j.devpack.Helper.toByteArray;
 @ManifestExtra(key = "author", value = "AxLabs")
 public class MemeContract {
 
-    static StorageContext ctx = Storage.getStorageContext();
+    static final int MAX_GET_MEMES = 100;
+    static final byte[] OWNER_KEY = new byte[]{0x0d};
+    static final byte DESC_MAP_PREFIX = 2;
 
+    static StorageContext ctx = Storage.getStorageContext();
     static final StorageMap contractMap = ctx.createMap((byte) 1);
-    static final byte DESC_PREFIX = 2;
-    static final StorageMap descriptionMap = ctx.createMap(DESC_PREFIX);
+    static final StorageMap descriptionMap = ctx.createMap(DESC_MAP_PREFIX);
     static final StorageMap urlMap = ctx.createMap((byte) 3);
     static final StorageMap imgHashMap = ctx.createMap((byte) 4);
 
-    static final byte[] OWNER_KEY = new byte[]{0x0d};
-
-    static final int MAX_GET_MEMES = 100;
 
     @OnDeployment
     public static void deploy(Object data, boolean update) throws Exception {
@@ -116,7 +115,7 @@ public class MemeContract {
         int finalIndex = startingIndex + MAX_GET_MEMES;
         List<Meme> memes = new List<>();
         Iterator<Iterator.Struct<ByteString, ByteString>> iterator = 
-            Storage.find(ctx, toByteArray(DESC_PREFIX), FindOptions.RemovePrefix);
+            Storage.find(ctx, toByteArray(DESC_MAP_PREFIX), FindOptions.RemovePrefix);
         int i = 0;
         while (iterator.next()) {
             if (i < startingIndex) {
