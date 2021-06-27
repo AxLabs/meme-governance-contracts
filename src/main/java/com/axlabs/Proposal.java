@@ -2,14 +2,14 @@ package com.axlabs;
 
 public class Proposal {
     public Meme meme;
-    public Boolean create;
-    public Boolean voteInProgress;
-    public Integer finalizationBlock;
-    public Integer votesInFavor;
-    public Integer votesAgainst;
+    public boolean create;
+    public boolean voteInProgress;
+    public int finalizationBlock;
+    public int votesInFavor;
+    public int votesAgainst;
 
-    public Proposal(Meme meme, Boolean create, Boolean voteInProgress, Integer finalizationBlock,
-            Integer votesInFavor, Integer votesAgainst) {
+    public Proposal(Meme meme, boolean create, boolean voteInProgress, int finalizationBlock,
+            int votesInFavor, int votesAgainst) {
         this.meme = meme;
         this.create = create;
         this.voteInProgress = voteInProgress;

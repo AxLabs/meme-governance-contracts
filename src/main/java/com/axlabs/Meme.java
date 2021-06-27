@@ -3,12 +3,12 @@ package com.axlabs;
 import io.neow3j.devpack.ByteString;
 
 public class Meme {
-    public ByteString id;
-    public ByteString description;
-    public ByteString url;
+    public String id;
+    public String description;
+    public String url;
     public ByteString imageHash;
     
-    public Meme(ByteString id, ByteString description, ByteString url, ByteString imageHash) {
+    public Meme(String id, String description, String url, ByteString imageHash) {
         this.id = id;
         this.description = description;
         this.url = url;
