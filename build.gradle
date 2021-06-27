@@ -14,12 +14,12 @@ repositories {
 }
 
 dependencies {
-    implementation 'io.neow3j:contract:3.11.2'
     implementation 'io.neow3j:devpack:3.11.2'
-    implementation 'io.neow3j:compiler:3.11.2'
     implementation 'ch.qos.logback:logback-classic:1.2.3'
     implementation 'junit:junit:4.12'
-    testCompile "org.testcontainers:testcontainers:1.15.2"
+    testImplementation 'io.neow3j:contract:3.11.2'
+    testImplementation 'io.neow3j:compiler:3.11.2'
+    testImplementation "org.testcontainers:testcontainers:1.15.2"
 }
 
 neow3jCompiler {
