@@ -27,7 +27,7 @@ import io.neow3j.devpack.events.Event5Args;
 
 @ManifestExtra(key = "author", value = "AxLabs")
 @Permission(contract = "*")
-public class MemeGovernance {
+public class GovernanceContract {
 
     static StorageContext ctx = Storage.getStorageContext();
     static final StorageMap CONTRACT_MAP = ctx.createMap((byte) 8);
@@ -49,9 +49,8 @@ public class MemeGovernance {
     static final StorageMap IMAGE_HASH_MAP = ctx.createMap((byte) 26);
 
     /**
-     * Stores the final blocks for voting on proposals.
-     * Used for any kind of proposal, hence only one type of proposal is allowed per meme id once
-     * at a time.
+     * Stores the final blocks for voting on proposals. Used for any kind of proposal, hence only
+     * one type of proposal is allowed per meme id once at a time.
      */
     static final StorageMap FINALIZATION_MAP = ctx.createMap((byte) 32);
 
@@ -66,9 +65,8 @@ public class MemeGovernance {
     private static Event1Arg<Hash160> onDeploy;
 
     /**
-     * Stores the last block on which a proposal can be safely executed.
-     * After this block has passed, other proposals may overwrite the proposals id with a new
-     * proposal.
+     * Stores the last block on which a proposal can be safely executed. After this block has
+     * passed, other proposals may overwrite the proposals id with a new proposal.
      */
     @OnDeployment
     public static void deploy(Object data, boolean update) throws Exception {
@@ -81,10 +79,8 @@ public class MemeGovernance {
      * Initializes the link to the underlying MemeContract and removes this contract's user.
      */
     private static void initialize(Hash160 memeContract) throws Exception {
-        boolean initialize = (boolean) Contract.call(memeContract,
-                "initialize",
-                CallFlags.States,
-                new Object[]{});
+        boolean initialize = (boolean) Contract.call(memeContract, "initialize", CallFlags.States,
+                new Object[] {});
         if (initialize) {
             CONTRACT_MAP.put(MEME_CONTRACT_KEY, memeContract.toByteString());
         } else {
@@ -117,21 +113,21 @@ public class MemeGovernance {
     }
 
     @DisplayName("CreationProposal")
-    private static Event5Args<String, String, String, String, Integer> onCreationProposal;
+    private static Event5Args<String, String, String, ByteString, Integer> onCreationProposal;
 
     /**
      * Proposes to create a meme with the provided data.
      *
      * @param description the description of the meme.
-     * @param url         the url of the meme.
-     * @param imageHash   the hash of the image.
+     * @param url the url of the meme.
+     * @param imageHash the sha256 hash of the image.
      * @throws Exception if this meme id already exists.
      */
     public static void proposeNewMeme(String memeId, String description, String url,
-            String imageHash) throws Exception {
+            ByteString imageHash) throws Exception {
         if (memeExists(memeId)) {
-            throw new Exception("There already exists a meme with this id. Propose and execute " +
-                    "its removal before you can create a proposal for a new meme with this id.");
+            throw new Exception("There already exists a meme with this id. Propose and execute "
+                    + "its removal before you can create a proposal for a new meme with this id.");
         }
         handleExistingProposal(memeId);
 
@@ -174,8 +170,7 @@ public class MemeGovernance {
 
     private static boolean memeExists(String memeId) {
         try {
-            Contract.call(getMemeContract(), "getMeme", CallFlags.ReadOnly,
-                    new Object[]{memeId});
+            Contract.call(getMemeContract(), "getMeme", CallFlags.ReadOnly, new Object[] {memeId});
         } catch (Exception e) {
             return false;
         }
@@ -188,8 +183,8 @@ public class MemeGovernance {
                 throw new Exception("A proposal is still ongoing for this meme id.");
             }
             if (isAccepted(memeId)) {
-                throw new Exception("This proposal was accepted and needs to be executed " +
-                        "before creating a new proposal for this meme id.");
+                throw new Exception("This proposal was accepted and needs to be executed "
+                        + "before creating a new proposal for this meme id.");
             }
         }
     }
@@ -197,8 +192,7 @@ public class MemeGovernance {
     private static boolean isAccepted(String memeId) {
         int votesFor = VOTE_FOR_MAP.get(memeId).toInteger();
         int votesAgainst = VOTE_AGAINST_MAP.get(memeId).toInteger();
-        return votesFor > votesAgainst
-                && votesFor >= MIN_VOTES_IN_FAVOR;
+        return votesFor > votesAgainst && votesFor >= MIN_VOTES_IN_FAVOR;
     }
 
     @DisplayName("Vote")
@@ -207,8 +201,8 @@ public class MemeGovernance {
     /**
      * Votes for or against the proposal of a meme.
      *
-     * @param memeId  the id of the meme.
-     * @param voter   the voter.
+     * @param memeId the id of the meme.
+     * @param voter the voter.
      * @param inFavor whether voting in favor of the proposal or against.
      */
     public static void vote(String memeId, Hash160 voter, boolean inFavor) throws Exception {
@@ -276,7 +270,7 @@ public class MemeGovernance {
                 String url = URL_MAP.get(memeId).toString();
                 String imageHash = IMAGE_HASH_MAP.get(memeId).toString();
                 boolean createMeme = (boolean) Contract.call(getMemeContract(), "createMeme",
-                        CallFlags.All, new Object[]{memeId, description, url, imageHash});
+                        CallFlags.All, new Object[] {memeId, description, url, imageHash});
                 if (createMeme) {
                     onCreation.fire(memeId, description, url, imageHash);
                     clearProposal(memeId);
@@ -284,7 +278,7 @@ public class MemeGovernance {
                 }
             } else {
                 boolean removeMeme = (boolean) Contract.call(getMemeContract(), "removeMeme",
-                        CallFlags.All, new Object[]{memeId});
+                        CallFlags.All, new Object[] {memeId});
                 if (removeMeme) {
                     onRemoval.fire(memeId);
                     clearProposal(memeId);
@@ -311,10 +305,8 @@ public class MemeGovernance {
 
         byte[] voteMapPrefix = createVotePrefix(memeId);
         StorageMap voteMap = ctx.createMap(voteMapPrefix);
-        Iterator<Iterator.Struct<ByteString, ByteString>> iterator = Storage.find(
-                ctx,
-                voteMapPrefix,
-                FindOptions.RemovePrefix);
+        Iterator<Iterator.Struct<ByteString, ByteString>> iterator =
+                Storage.find(ctx, voteMapPrefix, FindOptions.RemovePrefix);
         while (iterator.next()) {
             Iterator.Struct<ByteString, ByteString> pair = iterator.get();
             voteMap.delete(pair.key);
@@ -341,15 +333,15 @@ public class MemeGovernance {
         int votesAgainst = VOTE_AGAINST_MAP.get(memeId).toInteger();
 
         if (create) {
-            ByteString description = DESCRIPTION_MAP.get(memeId);
-            ByteString url = URL_MAP.get(memeId);
-            ByteString imageUrl = IMAGE_HASH_MAP.get(memeId);
-            Meme meme = new Meme(new ByteString(memeId), description, url, imageUrl);
+            String description = DESCRIPTION_MAP.get(memeId).toString();
+            String url = URL_MAP.get(memeId).toString();
+            ByteString imageHash = IMAGE_HASH_MAP.get(memeId);
+            Meme meme = new Meme(memeId, description, url, imageHash);
             return new Proposal(meme, true, voteInProgress, finalizationBlock, votesInFavor,
                     votesAgainst);
         } else {
             Meme meme = (Meme) Contract.call(getMemeContract(), "getMeme", CallFlags.ReadOnly,
-                    new Object[]{memeId});
+                    new Object[] {memeId});
             return new Proposal(meme, false, voteInProgress, finalizationBlock, votesInFavor,
                     votesAgainst);
         }
