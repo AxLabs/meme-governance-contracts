@@ -8,6 +8,7 @@ import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.List;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.Ignore;
 import org.junit.Test;
 import io.neow3j.contract.ContractManagement;
 import io.neow3j.contract.NefFile;
@@ -26,6 +27,7 @@ import io.neow3j.utils.Await;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 
+@Ignore
 public class Scripts {
 
     private static Neow3j neow = Neow3j.build(new HttpService("http://localhost:40332"));

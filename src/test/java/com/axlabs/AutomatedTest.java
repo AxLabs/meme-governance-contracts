@@ -1,5 +1,39 @@
 package com.axlabs;
 
+import static com.axlabs.NeoTestContainer.getNodeUrl;
+import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
+import static io.neow3j.contract.ContractUtils.writeNefFile;
+import static io.neow3j.contract.SmartContract.calcContractHash;
+import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
+import static io.neow3j.transaction.Signer.calledByEntry;
+import static io.neow3j.transaction.Signer.feeOnly;
+import static io.neow3j.types.ContractParameter.bool;
+import static io.neow3j.types.ContractParameter.byteArray;
+import static io.neow3j.types.ContractParameter.hash160;
+import static io.neow3j.types.ContractParameter.integer;
+import static io.neow3j.types.ContractParameter.string;
+import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
+import static io.neow3j.wallet.Account.createMultiSigAccount;
+import static java.util.Arrays.asList;
+import static java.util.Collections.singletonList;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
+import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import java.io.File;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import org.junit.BeforeClass;
+import org.junit.ClassRule;
+import org.junit.Test;
 import io.neow3j.compiler.CompilationUnit;
 import io.neow3j.compiler.Compiler;
 import io.neow3j.contract.ContractManagement;
@@ -17,41 +51,6 @@ import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-
-import static com.axlabs.NeoTestContainer.getNodeUrl;
-import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
-import static io.neow3j.contract.ContractUtils.writeNefFile;
-import static io.neow3j.contract.SmartContract.calcContractHash;
-import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
-import static io.neow3j.transaction.Signer.calledByEntry;
-import static io.neow3j.transaction.Signer.feeOnly;
-import static io.neow3j.types.ContractParameter.bool;
-import static io.neow3j.types.ContractParameter.hash160;
-import static io.neow3j.types.ContractParameter.integer;
-import static io.neow3j.types.ContractParameter.string;
-import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
-import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
-import static io.neow3j.wallet.Account.createMultiSigAccount;
-import static java.util.Arrays.asList;
-import static java.util.Collections.singletonList;
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class AutomatedTest {
 
@@ -204,7 +203,7 @@ public class AutomatedTest {
         ContractParameter memeId = string(memeIdString);
         String description = "coolDescriptionString";
         String url = "AxLabsUrlString";
-        String imgHash = "awesomeImageHashString";
+        String imgHash = "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
         createProposal(memeId, description, url, imgHash);
 
         Hash256 voteFor1 = vote(memeId, a1, true);
@@ -225,7 +224,7 @@ public class AutomatedTest {
         assertThat(meme.get(0).getString(), is(memeIdString));
         assertThat(meme.get(1).getString(), is(description));
         assertThat(meme.get(2).getString(), is(url));
-        assertThat(meme.get(3).getString(), is(imgHash));
+        assertThat(meme.get(3).getHexString(), is(imgHash));
     }
 
     @Test
@@ -268,11 +267,13 @@ public class AutomatedTest {
     public void testOverwriteUnacceptedCreateProposal() throws Throwable {
         String memeIdString = "overwriteUnacceptedCreateProposal";
         ContractParameter memeId = string(memeIdString);
-        createProposal(memeId, "description1", "url1", "imgHash1");
+        String imgHash1 = "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        createProposal(memeId, "description1", "url1", imgHash1);
 
         waitUntilVotingIsClosed(memeId);
 
-        createProposal(memeId, "description2", "url2", "imgHash2");
+        String imgHash2 = "1051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        createProposal(memeId, "description2", "url2", imgHash2);
         Hash256 voteFor1 = vote(memeId, a1, true);
         Hash256 voteFor2 = vote(memeId, a2, true);
         Hash256 voteFor3 = vote(memeId, a3, true);
@@ -291,7 +292,7 @@ public class AutomatedTest {
         assertThat(meme.get(0).getString(), is(memeIdString));
         assertThat(meme.get(1).getString(), is("description2"));
         assertThat(meme.get(2).getString(), is("url2"));
-        assertThat(meme.get(3).getString(), is("imgHash2"));
+        assertThat(meme.get(3).getHexString(), is(imgHash2));
     }
 
     // Creates a proposal that is not accepted and creates a new proposal with the same meme id.
@@ -330,10 +331,14 @@ public class AutomatedTest {
         ContractParameter memeId2 = string("getMemes2");
         ContractParameter memeId3 = string("getMemes3");
         ContractParameter memeId4 = string("getMemes4");
-        createMemeThroughVote(memeId1, "d1", "u1", "i1");
-        createMemeThroughVote(memeId2, "d2", "u2", "i2");
-        createMemeThroughVote(memeId3, "d3", "u3", "i3");
-        createMemeThroughVote(memeId4, "d4", "u4", "i4");
+        String imgHash1 = "1051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        String imgHash2 = "2051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        String imgHash3 = "3051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        String imgHash4 = "4051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
+        createMemeThroughVote(memeId1, "d1", "u1", imgHash1);
+        createMemeThroughVote(memeId2, "d2", "u2", imgHash2);
+        createMemeThroughVote(memeId3, "d3", "u3", imgHash3);
+        createMemeThroughVote(memeId4, "d4", "u4", imgHash4);
 
         List<StackItem> memes = memeContract.callInvokeFunction(getMemes, asList(integer(0)))
                 .getInvocationResult().getStack().get(0).getList();
@@ -344,13 +349,13 @@ public class AutomatedTest {
         assertThat(meme.get(0).getString(), is("getMemes1"));
         assertThat(meme.get(1).getString(), is("d1"));
         assertThat(meme.get(2).getString(), is("u1"));
-        assertThat(meme.get(3).getString(), is("i1"));
+        assertThat(meme.get(3).getHexString(), is(imgHash1));
 
         meme = memes.get(3).getList();
         assertThat(meme.get(0).getString(), is("getMemes4"));
         assertThat(meme.get(1).getString(), is("d4"));
         assertThat(meme.get(2).getString(), is("u4"));
-        assertThat(meme.get(3).getString(), is("i4"));
+        assertThat(meme.get(3).getHexString(), is(imgHash4));
     }
 
     // Helper methods
@@ -404,7 +409,7 @@ public class AutomatedTest {
         ContractManifest manifest = getObjectMapper()
                 .readValue(manifestFile, ContractManifest.class);
         try {
-            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest)
+            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest, hash160(committee))
                     .wallet(committeeWallet)
                     .signers(feeOnly(committee))
                     .sign()
@@ -454,8 +459,8 @@ public class AutomatedTest {
 
     private Hash256 createProposal(ContractParameter memeId, String description,
             String url, String imgHash) throws Throwable {
-        Hash256 hash = governanceContract.invokeFunction(proposeNewMeme, memeId,
-                string(description), string(url), string(imgHash))
+        Hash256 hash = governanceContract.invokeFunction(proposeNewMeme, 
+            memeId, string(description), string(url), byteArray(imgHash))
                 .wallet(committeeWallet)
                 .signers(feeOnly(committee))
                 .sign()
@@ -480,7 +485,7 @@ public class AutomatedTest {
 
     private Hash256 setupBasicProposal(ContractParameter memeId, boolean create) throws Throwable {
         if (create) {
-            return createProposal(memeId, "desc", "url", "imgHash");
+            return createProposal(memeId, "desc", "url", "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
         } else {
             return removeProposal(memeId);
         }
@@ -526,7 +531,7 @@ public class AutomatedTest {
     }
 
     private void createMemeThroughVote(ContractParameter memeId) throws Throwable {
-        createMemeThroughVote(memeId, "coolDescription", "AxLabsUrl", "awesomeImageHash");
+        createMemeThroughVote(memeId, "coolDescription", "AxLabsUrl", "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
     }
 
     private void waitUntilVotingIsClosed(ContractParameter memeId) throws IOException {
