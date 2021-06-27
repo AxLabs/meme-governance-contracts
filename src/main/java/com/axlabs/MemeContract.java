@@ -9,15 +9,12 @@ import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
-import io.neow3j.devpack.StringLiteralHelper;
-import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.constants.FindOptions;
 
 @ManifestExtra(key = "author", value = "AxLabs")
-@DisplayName("Memes")
 public class MemeContract {
 
     static StorageContext ctx = Storage.getStorageContext();
@@ -34,11 +31,16 @@ public class MemeContract {
     static final int MAX_GET_MEMES = 100;
 
     @OnDeployment
-    public static void deploy(Object data, boolean update) {
+    public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
-            Hash160 initialOwner =
-                    StringLiteralHelper.addressToScriptHash("NXXazKH39yNFWWZF5MJ8tEN98VYHwzn7g3");
-            CONTRACT_MAP.put(OWNER_KEY, initialOwner.toByteString());
+            String defaultErrorMsg = "MemeContract's deploy method expects the owner hash as an argument ";
+            if (data == null) {
+                throw new Exception(defaultErrorMsg + "but argument was null.");
+            }
+            if (!(data instanceof ByteString) || !(new Hash160((ByteString) data).isValid())) {
+                throw new Exception(defaultErrorMsg + "but argument was not a valid Hash160.");
+            }
+            CONTRACT_MAP.put(OWNER_KEY, (ByteString) data);
         }
     }
 
@@ -67,8 +69,7 @@ public class MemeContract {
     /**
      * Creates a meme.
      */
-    public static boolean createMeme(String memeId, String description, String url,
-            String imageHash) {
+    public static boolean createMeme(String memeId, String description, String url, String imageHash) {
         if (memeId == null || description == null || url == null || imageHash == null) {
             return false;
         }
@@ -107,10 +108,10 @@ public class MemeContract {
         if (REGISTRY_MAP.get(memeId) == null) {
             throw new Exception("No meme found for this id.");
         }
-        ByteString desc = DESCRIPTION_MAP.get(memeId);
-        ByteString url = URL_MAP.get(memeId);
+        String desc = DESCRIPTION_MAP.get(memeId).toString();
+        String url = URL_MAP.get(memeId).toString();
         ByteString imgHash = IMAGE_HASH_MAP.get(memeId);
-        return new Meme(new ByteString(memeId), desc, url, imgHash);
+        return new Meme(memeId, desc, url, imgHash);
     }
 
     @Safe
@@ -118,8 +119,8 @@ public class MemeContract {
         int finalIndex = startingIndex + MAX_GET_MEMES;
         int index = -1;
         List<Meme> memes = new List<>();
-        Iterator<Iterator.Struct<ByteString, ByteString>> iterator =
-                Storage.find(ctx, REGISTRY_PREFIX, FindOptions.RemovePrefix);
+        Iterator<Iterator.Struct<ByteString, ByteString>> iterator = 
+            Storage.find(ctx, REGISTRY_PREFIX, FindOptions.RemovePrefix);
         while (iterator.next()) {
             index += 1;
             if (index < startingIndex) {
@@ -129,9 +130,9 @@ public class MemeContract {
                 break;
             }
             Iterator.Struct<ByteString, ByteString> pair = iterator.get();
-            ByteString memeId = pair.key;
-            ByteString desc = DESCRIPTION_MAP.get(memeId);
-            ByteString url = URL_MAP.get(memeId);
+            String memeId = pair.key.toString();
+            String desc = DESCRIPTION_MAP.get(memeId).toString();
+            String url = URL_MAP.get(memeId).toString();
             ByteString imgHash = IMAGE_HASH_MAP.get(memeId);
 
             memes.add(new Meme(memeId, desc, url, imgHash));
