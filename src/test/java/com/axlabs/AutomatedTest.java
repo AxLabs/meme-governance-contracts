@@ -53,17 +53,17 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-public class IntegrationTest {
+public class AutomatedTest {
 
     private static Neow3j neow3j;
     private static SmartContract governanceContract;
     private static SmartContract memeContract;
 
-    private static final Path MEMES_NEF_FILE = Paths.get("./build/neow3j/Memes.nef");
-    private static final Path MEMES_MANIFEST_FILE = Paths.get("./build/neow3j/Memes.manifest.json");
-    private static final Path GOVERNANCE_NEF_FILE = Paths.get("./build/neow3j/MemeGovernance.nef");
+    private static final Path MEMES_NEF_FILE = Paths.get("./build/neow3j/MemeContract.nef");
+    private static final Path MEMES_MANIFEST_FILE = Paths.get("./build/neow3j/MemeContract.manifest.json");
+    private static final Path GOVERNANCE_NEF_FILE = Paths.get("./build/neow3j/GovernanceContract.nef");
     private static final Path GOVERNANCE_MANIFEST_FILE =
-            Paths.get("./build/neow3j/MemeGovernance.manifest.json");
+            Paths.get("./build/neow3j/GovernanceContract.manifest.json");
 
     private static final Account defaultAccount =
             Account.fromWIF("L1eV34wPoj9weqhGijdDLtVQzUpWGHszXXpdU9dPuh2nRFFzFa7E");
@@ -97,7 +97,6 @@ public class IntegrationTest {
     private static final String getVotingTime = "getVotingTime";
     private static final String getMinVotesInFavor = "getMinVotesInFavor";
     private static final String getMemeContract = "getMemeContract";
-    private static final String initialize = "initialize";
     private static final String getProposal = "getProposal";
 
     private static final BigInteger votingTime = BigInteger.TEN;
@@ -120,7 +119,7 @@ public class IntegrationTest {
         memeContract = deployMemeContract();
         System.out.println("MemeContract: " + memeContract.getScriptHash());
         governanceContract = deployMemeGovernance();
-        System.out.println("MemeGovernance: " + governanceContract.getScriptHash());
+        System.out.println("GovernanceContract: " + governanceContract.getScriptHash());
     }
 
     @Test
@@ -358,7 +357,7 @@ public class IntegrationTest {
 
     private static void compileContracts() throws IOException {
         compileContract(MemeContract.class.getCanonicalName());
-        compileContract(MemeGovernance.class.getCanonicalName());
+        compileContract(GovernanceContract.class.getCanonicalName());
     }
 
     private static void compileContract(String canonicalName) throws IOException {
