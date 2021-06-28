@@ -27,7 +27,7 @@ import io.neow3j.utils.Await;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 
-@Ignore
+// @Ignore
 public class Scripts {
 
     private static Neow3j neow = Neow3j.build(new HttpService("http://localhost:40332"));
@@ -47,17 +47,16 @@ public class Scripts {
     private static Account alice = Account.fromWIF("L1eV34wPoj9weqhGijdDLtVQzUpWGHszXXpdU9dPuh2nRFFzFa7E");
     private static Wallet wallet = Wallet.withAccounts(alice);
 
-    private static Hash160 memeContractHash = new Hash160("5abe202e2ef498cb72da496325d3edcab0e3bc68");
-    private static Hash160 govContractHash = new Hash160("5a6b362f5565c9b35dade2fc694b278c5608a0ad");
+    private static Hash160 memeContractHash = new Hash160("67dd5921623f51fe355e562f548e26abfe5a1ad7");
+    private static Hash160 govContractHash = new Hash160("ad261c4911ab962241a21cf714047439ee6fc00a");
 
     @Test
     public void deployMemeContract() throws Throwable {
         NefFile nef = NefFile.readFromFile(MEMES_NEF_FILE);
-        ContractManifest manifest =
-                objectMapper.readValue(MEMES_MANIFEST_FILE, ContractManifest.class);
+        ContractManifest manifest = objectMapper.readValue(MEMES_MANIFEST_FILE, ContractManifest.class);
         ContractParameter ownerHash = ContractParameter.hash160(alice);
         NeoSendRawTransaction response = contractMgmt.deploy(nef, manifest, ownerHash)
-                .signers(Signer.calledByEntry(alice))
+                .signers(Signer.feeOnly(alice))
                 .wallet(wallet)
                 .sign()
                 .send();
@@ -74,11 +73,12 @@ public class Scripts {
     @Test
     public void deployGovernanceContract() throws Throwable {
         NefFile nef = NefFile.readFromFile(GOVERNANCE_NEF_FILE);
-        ContractManifest manifest =
-                objectMapper.readValue(GOVERNANCE_MANIFEST_FILE, ContractManifest.class);
+        ContractManifest manifest = objectMapper.readValue(GOVERNANCE_MANIFEST_FILE, ContractManifest.class);
         ContractParameter ownerHash = ContractParameter.hash160(memeContractHash);
-        Signer signer =
-                new Signer.Builder().account(alice).allowedContracts(memeContractHash).build();
+        Signer signer = new Signer.Builder()
+                .account(alice)
+                .allowedContracts(memeContractHash)
+                .build();
 
         NeoSendRawTransaction response = contractMgmt.deploy(nef, manifest, ownerHash)
                 .signers(signer)
@@ -140,7 +140,7 @@ public class Scripts {
         NeoInvokeFunction response = govContract.callInvokeFunction("getProposals", Arrays.asList(fromIdxZero));
         List<StackItem> proposal = response.getInvocationResult().getStack().get(0).getList().get(0).getList();
         List<StackItem> meme = proposal.get(0).getList();
-        System.out.printf("Meme ID: %s, Description: %s, URL: %s, Hash: %s\n", 
+        System.out.printf("Meme ID: %s\nDescription: %s\nURL: %s\nHash: %s\n", 
                 meme.get(0).getString(), meme.get(1).getString(), meme.get(2).getString(), meme.get(3).getHexString());
     }
 
