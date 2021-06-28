@@ -1,5 +1,6 @@
 package com.axlabs;
 
+import static io.neow3j.devpack.Helper.toByteArray;
 import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.Hash160;
 import io.neow3j.devpack.Iterator;
@@ -12,7 +13,6 @@ import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.constants.FindOptions;
-import static io.neow3j.devpack.Helper.toByteArray;
 
 @ManifestExtra(key = "author", value = "AxLabs")
 public class MemeContract {
@@ -27,16 +27,14 @@ public class MemeContract {
     static final StorageMap urlMap = ctx.createMap((byte) 3);
     static final StorageMap imgHashMap = ctx.createMap((byte) 4);
 
-
     @OnDeployment
     public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
-            String defaultErrorMsg = "MemeContract's deploy method expects the owner hash as an argument ";
             if (data == null) {
-                throw new Exception(defaultErrorMsg + "but argument was null.");
+                throw new Exception("Expects the owner hash as an argument but argument was null.");
             }
-            if (!(data instanceof ByteString) || !(new Hash160((ByteString) data).isValid())) {
-                throw new Exception(defaultErrorMsg + "but argument was not a valid Hash160.");
+            if (!(new Hash160((ByteString) data).isValid())) {
+                throw new Exception("Expects the owner hash as an argument but argument was not a valid Hash160.");
             }
             contractMap.put(OWNER_KEY, (ByteString) data);
         }
@@ -51,8 +49,7 @@ public class MemeContract {
         if (!Runtime.checkWitness(getOwner())) {
             return false;
         }
-        Hash160 callingScriptHash = Runtime.getCallingScriptHash();
-        contractMap.put(OWNER_KEY, callingScriptHash.toByteArray());
+        contractMap.put(OWNER_KEY, Runtime.getCallingScriptHash().toByteArray());
         return true;
     }
 
@@ -110,6 +107,13 @@ public class MemeContract {
         return new Meme(memeId, desc, url, imgHash);
     }
 
+    /**
+     * Gets the memes stored in this contract. If there are more than {@link MemeContract#MAX_GET_MEMES} available in
+     * storage the caller has to use the {@code startingIndex} to page through the memes.
+     * 
+     * @param startingIndex The index at which to start fetching memes.
+     * @return The memes starting at the given index.
+     */
     @Safe
     public static List<Meme> getMemes(int startingIndex) {
         int finalIndex = startingIndex + MAX_GET_MEMES;
