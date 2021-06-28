@@ -1,6 +1,5 @@
 package com.axlabs;
 
-import static com.axlabs.NeoTestContainer.getNodeUrl;
 import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
 import static io.neow3j.contract.ContractUtils.writeNefFile;
 import static io.neow3j.contract.SmartContract.calcContractHash;
@@ -111,8 +110,7 @@ public class AutomatedTest {
 
     @BeforeClass
     public static void setUp() throws Throwable {
-        neow3j = Neow3j.build(new HttpService("http://localhost:40332"));
-        neow3j = Neow3j.build(new HttpService(getNodeUrl(neoTestContainer)));
+        neow3j = Neow3j.build(new HttpService(neoTestContainer.getNodeUrl()));
         compileContracts();
         fundAccounts(defaultAccount, a1, a2, a3, a4, a5, a6, a7, a8);
         memeContract = deployMemeContract();
@@ -421,10 +419,9 @@ public class AutomatedTest {
         } catch (TransactionConfigurationException e) {
             System.out.println(e.getMessage());
         }
-        return new SmartContract(
-                calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
-                        manifest.getName()),
-                neow3j);
+        Hash160 hash = calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
+                        manifest.getName());
+        return new SmartContract(hash, neow3j);
     }
 
     private static SmartContract deployMemeGovernance() throws Throwable {
@@ -451,10 +448,8 @@ public class AutomatedTest {
         } catch (TransactionConfigurationException e) {
             System.out.println(e.getMessage());
         }
-        return new SmartContract(
-                calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
-                        manifest.getName()),
-                neow3j);
+        Hash160 hash = calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(), manifest.getName());
+        return new SmartContract(hash, neow3j);
     }
 
     private Hash256 createProposal(ContractParameter memeId, String description,

@@ -47,8 +47,8 @@ public class NeoTestContainer extends GenericContainer<NeoTestContainer> {
         }
     }
 
-    public static String getNodeUrl(NeoTestContainer container) {
-        return "http://" + container.getContainerIpAddress() +
-                ":" + container.getMappedPort(EXPOSED_JSONRPC_PORT);
+    public String getNodeUrl() {
+        return "http://" + this.getContainerIpAddress() +
+                ":" + this.getMappedPort(EXPOSED_JSONRPC_PORT);
     }
 }
