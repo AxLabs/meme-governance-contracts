@@ -1,17 +1,16 @@
 package com.axlabs;
 
+import static io.neow3j.devpack.Helper.concat;
 import static io.neow3j.devpack.Helper.toByteArray;
 import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.Contract;
 import io.neow3j.devpack.Hash160;
-import io.neow3j.devpack.Helper;
 import io.neow3j.devpack.Iterator;
 import io.neow3j.devpack.List;
 import io.neow3j.devpack.Runtime;
 import io.neow3j.devpack.Storage;
 import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
-import io.neow3j.devpack.StringLiteralHelper;
 import io.neow3j.devpack.annotations.DisplayName;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
@@ -27,7 +26,7 @@ import io.neow3j.devpack.events.Event4Args;
 import io.neow3j.devpack.events.Event5Args;
 
 @ManifestExtra(key = "author", value = "AxLabs")
-@Permission(contract = "*")
+@Permission(contract = "*", methods = "*")
 public class GovernanceContract {
 
     static final byte[] MEME_CONTRACT_KEY = new byte[]{0x01};
@@ -42,7 +41,7 @@ public class GovernanceContract {
 
     static final StorageContext ctx = Storage.getStorageContext();
     static final StorageMap contractMap = ctx.createMap((byte) 1);
-    static final StorageMap proposalMap = ctx.createMap(PROPOSAL_PREFIX);
+    static final StorageMap proposalTypeMap = ctx.createMap(PROPOSAL_PREFIX);
     static final StorageMap voteCountMap = ctx.createMap((byte) 4);
     static final StorageMap voteForMap = ctx.createMap((byte) 5);
     static final StorageMap voteAgainstMap = ctx.createMap((byte) 6);
@@ -65,20 +64,13 @@ public class GovernanceContract {
     @OnDeployment
     public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
-            initialize((Hash160) data);
-        }
-    }
-
-    /**
-     * Initializes the link to the underlying MemeContract and removes this contract's user.
-     */
-    private static void initialize(Hash160 memeContract) throws Exception {
-        boolean initialize = (boolean) Contract.call(memeContract, "initialize", CallFlags.States,
-                new Object[] {});
-        if (initialize) {
-            contractMap.put(MEME_CONTRACT_KEY, memeContract.toByteString());
-        } else {
-            throw new Exception("Could not initialize.");
+            Hash160 memeContractHash = (Hash160) data;
+            boolean isInitialized = (boolean) Contract.call(memeContractHash, "initialize", CallFlags.States, new Object[]{});
+            if (isInitialized) {
+                contractMap.put(MEME_CONTRACT_KEY, memeContractHash.toByteString());
+            } else {
+                throw new Exception("Could not initialize.");
+            }
         }
     }
 
@@ -125,7 +117,7 @@ public class GovernanceContract {
         }
         handleExistingProposal(memeId);
 
-        proposalMap.put(memeId, CREATE);
+        proposalTypeMap.put(memeId, CREATE);
         descriptionMap.put(memeId, description);
         urlMap.put(memeId, url);
         imgHashMap.put(memeId, imageHash);
@@ -153,7 +145,7 @@ public class GovernanceContract {
         handleExistingProposal(memeId);
 
         int currentIndex = LedgerContract.currentIndex();
-        proposalMap.put(memeId, REMOVE);
+        proposalTypeMap.put(memeId, REMOVE);
         int finalization = currentIndex + getVotingTime();
         finalizationMap.put(memeId, finalization);
         voteCountMap.put(memeId, 0);
@@ -172,8 +164,8 @@ public class GovernanceContract {
     }
 
     private static void handleExistingProposal(String memeId) throws Exception {
-        if (proposalMap.get(memeId) != null) {
-            if (voteInProgress(memeId)) {
+        if (proposalTypeMap.get(memeId) != null) {
+            if (isVoteInProgress(memeId)) {
                 throw new Exception("A proposal is still ongoing for this meme id.");
             }
             if (isAccepted(memeId)) {
@@ -203,21 +195,19 @@ public class GovernanceContract {
         if (!Runtime.checkWitness(voter)) {
             throw new Exception("No valid signature for the provided voter.");
         }
-        if (proposalMap.get(memeId) == null) {
+        if (proposalTypeMap.get(memeId) == null) {
             throw new Exception("No proposal found.");
         }
-        if (!voteInProgress(memeId)) {
+        if (!isVoteInProgress(memeId)) {
             throw new Exception("The vote for this meme is no longer open.");
         }
 
-        StorageMap voteMap = ctx.createMap(createVotePrefix(memeId));
+        StorageMap voterMap = ctx.createMap(createVoterMapPrefix(memeId));
         ByteString voterByteString = voter.toByteString();
-        ByteString alreadyVoted = voteMap.get(voterByteString);
-        if (alreadyVoted != null) {
+        if (voterMap.get(voterByteString) != null) {
             throw new Exception("Already voted.");
         }
-        voteMap.put(voterByteString, 1);
-        onVote.fire(memeId, voterByteString, inFavor);
+        voterMap.put(voterByteString, 1);
 
         int currentVotes = voteCountMap.get(memeId).toInteger();
         voteCountMap.put(memeId, currentVotes + 1);
@@ -228,14 +218,15 @@ public class GovernanceContract {
             int votesAgainst = voteAgainstMap.get(memeId).toInteger();
             voteAgainstMap.put(memeId, votesAgainst + 1);
         }
+        onVote.fire(memeId, voterByteString, inFavor);
     }
 
-    private static byte[] createVotePrefix(String memeId) {
-        return Helper.concat(Helper.toByteArray(VOTER_MAP_PREPREFIX), memeId);
+    private static byte[] createVoterMapPrefix(String memeId) {
+        return concat(toByteArray(VOTER_MAP_PREPREFIX), memeId);
     }
 
     @DisplayName("MemeCreation")
-    private static Event4Args<String, String, String, String> onCreation;
+    private static Event4Args<String, String, String, ByteString> onCreation;
 
     @DisplayName("MemeRemoval")
     private static Event1Arg<String> onRemoval;
@@ -247,24 +238,22 @@ public class GovernanceContract {
      * Executes a proposal.
      */
     public static boolean execute(String memeId) throws Exception {
-        ByteString proposal = proposalMap.get(memeId);
-        if (proposal == null) {
+        ByteString proposalType = proposalTypeMap.get(memeId);
+        if (proposalType == null) {
             throw new Exception("No proposal found for this id.");
         }
-        if (voteInProgress(memeId)) {
+        if (isVoteInProgress(memeId)) {
             throw new Exception("The voting timeframe for this id is still open.");
         }
         int votesFor = voteForMap.get(memeId).toInteger();
         int votesAgainst = voteAgainstMap.get(memeId).toInteger();
-        boolean inFavor = votesFor > votesAgainst;
-        if (inFavor && votesFor >= MIN_VOTES_IN_FAVOR) {
-            int proposalKind = proposal.toInteger();
-            if (proposalKind == CREATE) {
+        if (votesFor > votesAgainst && votesFor >= MIN_VOTES_IN_FAVOR) {
+            if (proposalType.toInteger() == CREATE) {
                 String description = descriptionMap.get(memeId).toString();
                 String url = urlMap.get(memeId).toString();
-                String imageHash = imgHashMap.get(memeId).toString();
-                boolean createMeme = (boolean) Contract.call(getMemeContract(), "createMeme",
-                        CallFlags.All, new Object[] {memeId, description, url, imageHash});
+                ByteString imageHash = imgHashMap.get(memeId);
+                boolean createMeme = (boolean) Contract.call(getMemeContract(), "createMeme", CallFlags.All, 
+                        new Object[] {memeId, description, url, imageHash});
                 if (createMeme) {
                     onCreation.fire(memeId, description, url, imageHash);
                     clearProposal(memeId);
@@ -286,31 +275,30 @@ public class GovernanceContract {
         return true;
     }
 
-    private static boolean voteInProgress(String memeId) {
+    private static boolean isVoteInProgress(String memeId) {
         int currentIndex = LedgerContract.currentIndex();
         int finalizationBlock = finalizationMap.get(memeId).toInteger();
         return finalizationBlock >= currentIndex;
     }
 
     private static void clearProposal(String memeId) {
-        proposalMap.delete(memeId);
+        proposalTypeMap.delete(memeId);
         finalizationMap.delete(memeId);
-
-        byte[] voteMapPrefix = createVotePrefix(memeId);
-        StorageMap voteMap = ctx.createMap(voteMapPrefix);
-        Iterator<Iterator.Struct<ByteString, ByteString>> iterator =
-                Storage.find(ctx, voteMapPrefix, FindOptions.RemovePrefix);
-        while (iterator.next()) {
-            voteMap.delete(iterator.get().key);
-        }
-
         voteCountMap.delete(memeId);
         voteForMap.delete(memeId);
         voteAgainstMap.delete(memeId);
-
         descriptionMap.delete(memeId);
         urlMap.delete(memeId);
         imgHashMap.delete(memeId);
+
+        // Clear voter map 
+        byte[] voterMapPrefix = createVoterMapPrefix(memeId);
+        StorageMap voterMap = ctx.createMap(voterMapPrefix);
+        Iterator<Iterator.Struct<ByteString, ByteString>> iterator =
+                Storage.find(ctx, voterMapPrefix, FindOptions.RemovePrefix);
+        while (iterator.next()) {
+            voterMap.delete(iterator.get().key);
+        }
     }
 
     /**
@@ -318,8 +306,8 @@ public class GovernanceContract {
      */
     @Safe
     public static Proposal getProposal(String memeId) {
-        boolean create = proposalMap.get(memeId).toInteger() == CREATE;
-        boolean voteInProgress = voteInProgress(memeId);
+        boolean create = proposalTypeMap.get(memeId).toInteger() == CREATE;
+        boolean voteInProgress = isVoteInProgress(memeId);
         int finalizationBlock = finalizationMap.get(memeId).toInteger();
         int votesInFavor = voteForMap.get(memeId).toInteger();
         int votesAgainst = voteAgainstMap.get(memeId).toInteger();
