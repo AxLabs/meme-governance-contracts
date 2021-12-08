@@ -1,91 +1,72 @@
 package com.axlabs;
 
-import static io.neow3j.contract.ContractUtils.writeContractManifestFile;
-import static io.neow3j.contract.ContractUtils.writeNefFile;
-import static io.neow3j.contract.SmartContract.calcContractHash;
-import static io.neow3j.protocol.ObjectMapperFactory.getObjectMapper;
-import static io.neow3j.transaction.Signer.calledByEntry;
-import static io.neow3j.transaction.Signer.feeOnly;
+import io.neow3j.contract.GasToken;
+import io.neow3j.contract.SmartContract;
+import io.neow3j.crypto.ECKeyPair;
+import io.neow3j.protocol.Neow3j;
+import io.neow3j.protocol.core.response.NeoSendRawTransaction;
+import io.neow3j.protocol.core.stackitem.StackItem;
+import io.neow3j.test.ContractTest;
+import io.neow3j.test.ContractTestExtension;
+import io.neow3j.test.DeployConfig;
+import io.neow3j.test.DeployConfiguration;
+import io.neow3j.test.DeployContext;
+import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
+import io.neow3j.transaction.exceptions.TransactionConfigurationException;
+import io.neow3j.types.ContractParameter;
+import io.neow3j.types.Hash160;
+import io.neow3j.types.Hash256;
+import io.neow3j.utils.Numeric;
+import io.neow3j.wallet.Account;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.RegisterExtension;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
+
 import static io.neow3j.types.ContractParameter.bool;
 import static io.neow3j.types.ContractParameter.byteArray;
 import static io.neow3j.types.ContractParameter.hash160;
 import static io.neow3j.types.ContractParameter.integer;
 import static io.neow3j.types.ContractParameter.string;
-import static io.neow3j.utils.Await.waitUntilBlockCountIsGreaterThan;
 import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
-import static io.neow3j.wallet.Account.createMultiSigAccount;
 import static java.util.Arrays.asList;
-import static java.util.Collections.singletonList;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
-import static org.junit.Assert.assertThat;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-import java.io.File;
-import java.io.IOException;
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.List;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import io.neow3j.compiler.CompilationUnit;
-import io.neow3j.compiler.Compiler;
-import io.neow3j.contract.ContractManagement;
-import io.neow3j.contract.GasToken;
-import io.neow3j.contract.NefFile;
-import io.neow3j.contract.SmartContract;
-import io.neow3j.protocol.Neow3j;
-import io.neow3j.protocol.core.response.ContractManifest;
-import io.neow3j.protocol.core.stackitem.StackItem;
-import io.neow3j.protocol.http.HttpService;
-import io.neow3j.transaction.Signer;
-import io.neow3j.transaction.exceptions.TransactionConfigurationException;
-import io.neow3j.types.ContractParameter;
-import io.neow3j.types.Hash160;
-import io.neow3j.types.Hash256;
-import io.neow3j.wallet.Account;
-import io.neow3j.wallet.Wallet;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
-public class AutomatedTest {
+@ContractTest(
+        blockTime = 1,
+        contracts = {MemeContract.class, GovernanceContract.class},
+        batchFile = "neoxp.batch",
+        configFile = "neoxp.neo-express"
+)
+public class ContractsTest {
+
+    @RegisterExtension
+    private static ContractTestExtension ext = new ContractTestExtension();
 
     private static Neow3j neow3j;
     private static SmartContract governanceContract;
     private static SmartContract memeContract;
 
-    private static final Path MEMES_NEF_FILE = Paths.get("./build/neow3j/MemeContract.nef");
-    private static final Path MEMES_MANIFEST_FILE = Paths.get("./build/neow3j/MemeContract.manifest.json");
-    private static final Path GOVERNANCE_NEF_FILE = Paths.get("./build/neow3j/GovernanceContract.nef");
-    private static final Path GOVERNANCE_MANIFEST_FILE =
-            Paths.get("./build/neow3j/GovernanceContract.manifest.json");
-
-    private static final Account defaultAccount =
-            Account.fromWIF("L1eV34wPoj9weqhGijdDLtVQzUpWGHszXXpdU9dPuh2nRFFzFa7E");
-    private static final Account committee =
-            createMultiSigAccount(singletonList(defaultAccount.getECKeyPair().getPublicKey()), 1);
-    private static final Wallet committeeWallet = Wallet.withAccounts(committee, defaultAccount);
-    private static final Account a1 =
-            Account.fromWIF("L3cNMQUSrvUrHx1MzacwHiUeCWzqK2MLt5fPvJj9mz6L2rzYZpok");
-    private static final Account a2 =
-            Account.fromWIF("L1RgqMJEBjdXcuYCMYB6m7viQ9zjkNPjZPAKhhBoXxEsygNXENBb");
-    private static final Account a3 =
-            Account.fromWIF("Kzkwmjq4aygAHPYwCAhFYwrviar3E5JyiPuNYVcg2Ks88iLm4TmV");
-    private static final Account a4 =
-            Account.fromWIF("KzTJz7cKJM4dZDeFJroPPK2buag3nA1gWpJtLvoxuEcQUyC4hbzp");
-    private static final Account a5 =
-            Account.fromWIF("KxT5Fv5kXb82hybcm9vgigncTj69dDcb44RW1mGYrHsYBFo1FkN9");
-    private static final Account a6 =
-            Account.fromWIF("L4zaeMKdFewWoPTU7X86tNg6VkvbZqZsGgS6xL7Sm4pXYay4rsRP");
-    private static final Account a7 =
-            Account.fromWIF("Kyb13EoA3RikT7RCXGRzN8QdYmhoR89RcPVE61hLUWXAMk15p1wo");
-    private static final Account a8 =
-            Account.fromWIF("L2bZXerkt47c5oTE99dQrhx12NMSLHm2oy1nck4E8rSeTVUbFLiV");
-
-    private static final Wallet wallet = Wallet.withAccounts(a1, a2, a3, a4, a5, a6, a7, a8);
+    private static final int VOTING_TIME = 10;
+    private static final String ALICE_SKEY =
+            "84180ac9d6eb6fba207ea4ef9d2200102d1ebeb4b9c07e2c6a738a42742e27a5";
+    // MemeContract owner
+    private static Account a1 = new Account(
+            ECKeyPair.create(Numeric.hexStringToByteArray(ALICE_SKEY)));
+    private static Account a2 = Account.create();
+    private static Account a3 = Account.create();
+    private static Account a4 = Account.create();
 
     // Governance methods
     private static final String vote = "vote";
@@ -97,26 +78,35 @@ public class AutomatedTest {
     private static final String getMemeContract = "getMemeContract";
     private static final String getProposal = "getProposal";
 
-    private static final BigInteger votingTime = BigInteger.TEN;
-    private static final BigInteger minVotesInFavor = new BigInteger("3");
-
     // Meme contract methods
     private static final String getMeme = "getMeme";
     private static final String getOwner = "getOwner";
     private static final String getMemes = "getMemes";
 
-    @ClassRule
-    public static NeoTestContainer neoTestContainer = new NeoTestContainer();
+    private static final BigInteger votingTime = BigInteger.TEN;
+    private static final BigInteger minVotesInFavor = new BigInteger("3");
 
-    @BeforeClass
+    @DeployConfig(MemeContract.class)
+    public static void memeContractDeployConfig(DeployConfiguration config) {
+        config.setDeployParam(hash160(a1));
+        config.setSigner(AccountSigner.calledByEntry(a1));
+    }
+
+    @DeployConfig(GovernanceContract.class)
+    public static void govContractDeployConfig(DeployConfiguration config, DeployContext ctx) {
+        SmartContract memeContract = ctx.getDeployedContract(MemeContract.class);
+        config.setDeployParam(hash160(memeContract.getScriptHash()));
+        AccountSigner signer = AccountSigner.none(a1);
+        signer.setAllowedContracts(memeContract.getScriptHash());
+        config.setSigner(signer);
+    }
+
+    @BeforeAll
     public static void setUp() throws Throwable {
-        neow3j = Neow3j.build(new HttpService(neoTestContainer.getNodeUrl()));
-        compileContracts();
-        fundAccounts(defaultAccount, a1, a2, a3, a4, a5, a6, a7, a8);
-        memeContract = deployMemeContract();
-        System.out.println("MemeContract: " + memeContract.getScriptHash());
-        governanceContract = deployMemeGovernance();
-        System.out.println("GovernanceContract: " + governanceContract.getScriptHash());
+        neow3j = ext.getNeow3j();
+        memeContract = ext.getDeployedContract(MemeContract.class);
+        governanceContract = ext.getDeployedContract(GovernanceContract.class);
+        fundAccounts(a1, a2, a3, a4);
     }
 
     @Test
@@ -185,7 +175,7 @@ public class AutomatedTest {
         waitUntilTransactionIsExecuted(voteAgainst, neow3j);
         try {
             vote(memeId, a4, false);
-            fail();
+            fail("Account that already voted, should not be able to vote again.");
         } catch (TransactionConfigurationException e) {
             assertThat(e.getMessage(), containsString("Already voted"));
         }
@@ -211,7 +201,7 @@ public class AutomatedTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        waitUntilVotingIsClosed(memeId);
+        ext.fastForward(VOTING_TIME);
 
         Hash256 exec = execProp(memeId, a4);
         waitUntilTransactionIsExecuted(exec, neow3j);
@@ -234,23 +224,15 @@ public class AutomatedTest {
         Hash256 voteFor1 = vote(memeId, a1, true);
         Hash256 voteFor2 = vote(memeId, a2, true);
         Hash256 voteFor3 = vote(memeId, a3, true);
-        Hash256 voteFor4 = vote(memeId, a4, true);
-        Hash256 voteFor5 = vote(memeId, a5, true);
-        Hash256 voteAgainst6 = vote(memeId, a6, false);
-        Hash256 voteAgainst7 = vote(memeId, a7, false);
-        Hash256 voteAgainst8 = vote(memeId, a8, false);
+        Hash256 voteAgainst4 = vote(memeId, a4, false);
         waitUntilTransactionIsExecuted(voteFor1, neow3j);
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
-        waitUntilTransactionIsExecuted(voteFor4, neow3j);
-        waitUntilTransactionIsExecuted(voteFor5, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst6, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst7, neow3j);
-        waitUntilTransactionIsExecuted(voteAgainst8, neow3j);
+        waitUntilTransactionIsExecuted(voteAgainst4, neow3j);
 
-        waitUntilVotingIsClosed(memeId);
+        ext.fastForward(VOTING_TIME);
 
-        Hash256 exec = execProp(memeId, a6);
+        Hash256 exec = execProp(memeId, a3);
         waitUntilTransactionIsExecuted(exec, neow3j);
 
         String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
@@ -268,7 +250,8 @@ public class AutomatedTest {
         String imgHash1 = "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
         createProposal(memeId, "description1", "url1", imgHash1);
 
-        waitUntilVotingIsClosed(memeId);
+        // Fast-forward till proposal is finalized.
+        ext.fastForward(VOTING_TIME);
 
         String imgHash2 = "1051b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275";
         createProposal(memeId, "description2", "url2", imgHash2);
@@ -279,9 +262,10 @@ public class AutomatedTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        waitUntilVotingIsClosed(memeId);
+        // Fast-forward till proposal is finalized.
+        ext.fastForward(VOTING_TIME);
 
-        Hash256 exec = execProp(memeId, a6);
+        Hash256 exec = execProp(memeId, a3);
         waitUntilTransactionIsExecuted(exec, neow3j);
 
         List<StackItem> meme = memeContract.callInvokeFunction(getMeme, asList(memeId))
@@ -301,7 +285,7 @@ public class AutomatedTest {
         createMemeThroughVote(memeId);
 
         removeProposal(memeId);
-        waitUntilVotingIsClosed(memeId);
+        ext.fastForward(VOTING_TIME);
 
         removeProposal(memeId);
 
@@ -312,9 +296,9 @@ public class AutomatedTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        waitUntilVotingIsClosed(memeId);
+        ext.fastForward(VOTING_TIME);
 
-        Hash256 exec = execProp(memeId, a6);
+        Hash256 exec = execProp(memeId, a3);
         waitUntilTransactionIsExecuted(exec, neow3j);
 
         String exception = memeContract.callInvokeFunction(getMeme, asList(memeId))
@@ -356,155 +340,68 @@ public class AutomatedTest {
         assertThat(meme.get(3).getHexString(), is(imgHash4));
     }
 
-    // Helper methods
-
-    private static void compileContracts() throws IOException {
-        compileContract(MemeContract.class.getCanonicalName());
-        compileContract(GovernanceContract.class.getCanonicalName());
-    }
-
-    private static void compileContract(String canonicalName) throws IOException {
-        // Compile the NonFungibleToken contract and construct a SmartContract object from it.
-        CompilationUnit res = new Compiler().compile(canonicalName);
-
-        // Write contract (compiled, NEF) to the disk
-        Path buildNeow3jPath = Paths.get("build", "neow3j");
-        buildNeow3jPath.toFile().mkdirs();
-        writeNefFile(res.getNefFile(), res.getManifest().getName(), buildNeow3jPath);
-
-        // Write manifest to the disk
-        writeContractManifestFile(res.getManifest(), buildNeow3jPath);
-    }
-
-    private static void fundAccounts(Account defaultAccount, Account... accounts) throws Throwable {
+    private static void fundAccounts(Account... accounts) throws Throwable {
+        ContractTestExtension.GenesisAccount genesis = ext.getGenesisAccount();
         GasToken gasToken = new GasToken(neow3j);
         BigInteger amount = gasToken.toFractions(new BigDecimal("2000"));
-        BigInteger minAmount = gasToken.toFractions(new BigDecimal("500"));
+//        BigInteger minAmount = gasToken.toFractions(new BigDecimal("500"));
         List<Hash256> txHashes = new ArrayList<>();
         for (Account a : accounts) {
-            if (gasToken.getBalanceOf(a).compareTo(minAmount) < 0) {
-                Hash256 txHash = gasToken
-                        .transferFromSpecificAccounts(committeeWallet, a.getScriptHash(),
-                                amount, committee.getScriptHash())
-                        .sign()
-                        .send()
-                        .getSendRawTransaction()
-                        .getHash();
-                txHashes.add(txHash);
-                System.out.println("Funded account " + a.getAddress());
-            }
+            Transaction tx = gasToken.transfer(genesis.getMultiSigAccount().getScriptHash(),
+                            a.getScriptHash(), amount)
+                    .signers(AccountSigner.calledByEntry(genesis.getMultiSigAccount()))
+                    .getUnsignedTransaction();
+            Hash256 txHash = tx.addMultiSigWitness(
+                            genesis.getMultiSigAccount().getVerificationScript(),
+                            genesis.getSignerAccounts())
+                    .send().getSendRawTransaction().getHash();
+            txHashes.add(txHash);
+            System.out.println("Funded account " + a.getAddress());
         }
         for (Hash256 h : txHashes) {
             waitUntilTransactionIsExecuted(h, neow3j);
         }
     }
 
-    private static SmartContract deployMemeContract() throws Throwable {
-        File nefFile = new File(MEMES_NEF_FILE.toUri());
-        NefFile nef = NefFile.readFromFile(nefFile);
-
-        File manifestFile = new File(MEMES_MANIFEST_FILE.toUri());
-        ContractManifest manifest = getObjectMapper()
-                .readValue(manifestFile, ContractManifest.class);
-        try {
-            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest, hash160(committee))
-                    .wallet(committeeWallet)
-                    .signers(feeOnly(committee))
-                    .sign()
-                    .send()
-                    .getSendRawTransaction()
-                    .getHash();
-            waitUntilTransactionIsExecuted(txHash, neow3j);
-            System.out.println("Deployed MemeContract");
-        } catch (TransactionConfigurationException e) {
-            System.out.println(e.getMessage());
-        }
-        Hash160 hash = calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(),
-                        manifest.getName());
-        return new SmartContract(hash, neow3j);
-    }
-
-    private static SmartContract deployMemeGovernance() throws Throwable {
-        File nefFile = new File(GOVERNANCE_NEF_FILE.toUri());
-        NefFile nef = NefFile.readFromFile(nefFile);
-
-        File manifestFile = new File(GOVERNANCE_MANIFEST_FILE.toUri());
-        ContractManifest manifest = getObjectMapper()
-                .readValue(manifestFile, ContractManifest.class);
-
-        try {
-            Hash256 txHash = new ContractManagement(neow3j).deploy(nef, manifest,
-                    hash160(memeContract.getScriptHash()))
-                    .wallet(committeeWallet)
-                    .signers(new Signer.Builder().account(committee)
-                            .allowedContracts(memeContract.getScriptHash())
-                            .build())
-                    .sign()
-                    .send()
-                    .getSendRawTransaction()
-                    .getHash();
-            waitUntilTransactionIsExecuted(txHash, neow3j);
-            System.out.println("Deployed MemeGovernance");
-        } catch (TransactionConfigurationException e) {
-            System.out.println(e.getMessage());
-        }
-        Hash160 hash = calcContractHash(committee.getScriptHash(), nef.getCheckSumAsInteger(), manifest.getName());
-        return new SmartContract(hash, neow3j);
-    }
-
     private Hash256 createProposal(ContractParameter memeId, String description,
             String url, String imgHash) throws Throwable {
-        Hash256 hash = governanceContract.invokeFunction(proposeNewMeme, 
-            memeId, string(description), string(url), byteArray(imgHash))
-                .wallet(committeeWallet)
-                .signers(feeOnly(committee))
-                .sign()
-                .send()
-                .getSendRawTransaction()
-                .getHash();
+        Hash256 hash = governanceContract.invokeFunction(proposeNewMeme,
+                        memeId, string(description), string(url), byteArray(imgHash))
+                .signers(AccountSigner.calledByEntry(a1))
+                .sign().send().getSendRawTransaction().getHash();
         waitUntilTransactionIsExecuted(hash, neow3j);
         return hash;
     }
 
     private Hash256 removeProposal(ContractParameter memeId) throws Throwable {
         Hash256 hash = governanceContract.invokeFunction(proposeRemoval, memeId)
-                .wallet(committeeWallet)
-                .signers(feeOnly(committee))
-                .sign()
-                .send()
-                .getSendRawTransaction()
-                .getHash();
+                .signers(AccountSigner.calledByEntry(a1))
+                .sign().send().getSendRawTransaction().getHash();
         waitUntilTransactionIsExecuted(hash, neow3j);
         return hash;
     }
 
     private Hash256 setupBasicProposal(ContractParameter memeId, boolean create) throws Throwable {
         if (create) {
-            return createProposal(memeId, "desc", "url", "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
+            return createProposal(memeId, "desc", "url",
+                    "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
         } else {
             return removeProposal(memeId);
         }
     }
 
     private Hash256 vote(ContractParameter memeId, Account a, boolean inFavor) throws Throwable {
-        return governanceContract.invokeFunction(
-                vote, memeId, hash160(a.getScriptHash()), bool(inFavor))
-                .wallet(wallet)
-                .signers(calledByEntry(a))
-                .sign()
-                .send()
-                .getSendRawTransaction()
-                .getHash();
+        NeoSendRawTransaction sendRawTransaction = governanceContract.invokeFunction(
+                        vote, memeId, hash160(a.getScriptHash()), bool(inFavor))
+                .signers(AccountSigner.calledByEntry(a))
+                .sign().send();
+        return sendRawTransaction.getSendRawTransaction().getHash();
     }
 
     private Hash256 execProp(ContractParameter memeId, Account a) throws Throwable {
         return governanceContract.invokeFunction(execute, memeId)
-                .wallet(wallet)
-                .signers(feeOnly(a))
-                .sign()
-                .send()
-                .getSendRawTransaction()
-                .getHash();
+                .signers(AccountSigner.calledByEntry(a))
+                .sign().send().getSendRawTransaction().getHash();
     }
 
     private void createMemeThroughVote(ContractParameter memeId, String description, String url,
@@ -518,20 +415,15 @@ public class AutomatedTest {
         waitUntilTransactionIsExecuted(voteFor2, neow3j);
         waitUntilTransactionIsExecuted(voteFor3, neow3j);
 
-        IntProposal proposal = getProposal(memeId);
-        waitUntilBlockCountIsGreaterThan(neow3j, proposal.finalizationBlock.add(BigInteger.ONE));
+        ext.fastForward(VOTING_TIME);
 
         Hash256 exec = execProp(memeId, a1);
         waitUntilTransactionIsExecuted(exec, neow3j);
     }
 
     private void createMemeThroughVote(ContractParameter memeId) throws Throwable {
-        createMemeThroughVote(memeId, "coolDescription", "AxLabsUrl", "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
-    }
-
-    private void waitUntilVotingIsClosed(ContractParameter memeId) throws IOException {
-        waitUntilBlockCountIsGreaterThan(neow3j,
-                getProposal(memeId).finalizationBlock.add(BigInteger.ONE));
+        createMemeThroughVote(memeId, "coolDescription", "AxLabsUrl",
+                "ae51b3d6f4876cd78e284c07003c41550741042b23b5bd13973cb16cac197275");
     }
 
     private static IntProposal getProposal(ContractParameter memeId) throws IOException {
