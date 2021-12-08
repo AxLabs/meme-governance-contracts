@@ -1,6 +1,6 @@
 plugins {
     id 'java'
-    id 'io.neow3j.gradle-plugin' version '3.14.0'
+    id 'io.neow3j.gradle-plugin' version '3.11.2'
 }
 
 group 'com.axlabs'
@@ -10,21 +10,16 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 repositories {
-    mavenLocal()
     mavenCentral()
 }
 
-tasks.withType(Test) {
-    useJUnitPlatform()
-}
-
 dependencies {
-    implementation 'io.neow3j:devpack:3.14.1'
-    implementation 'ch.qos.logback:logback-classic:1.2.7'
-    testImplementation 'io.neow3j:devpack-test:3.14.1',
-            'org.testcontainers:testcontainers:1.16.2',
-            'org.junit.jupiter:junit-jupiter:5.8.2',
-            'org.hamcrest:hamcrest:2.2'
+    implementation 'io.neow3j:devpack:3.11.2'
+    implementation 'ch.qos.logback:logback-classic:1.2.3'
+    implementation 'junit:junit:4.12'
+    testImplementation 'io.neow3j:contract:3.11.2'
+    testImplementation 'io.neow3j:compiler:3.11.2'
+    testImplementation "org.testcontainers:testcontainers:1.15.2"
 }
 
 neow3jCompiler {
