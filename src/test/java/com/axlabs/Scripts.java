@@ -17,7 +17,7 @@ import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.utils.Await;
 import io.neow3j.wallet.Account;
-import org.junit.Test;
+import org.junit.jupiter.api.Test;
 
 import java.io.File;
 import java.io.IOException;
@@ -28,7 +28,6 @@ import java.util.List;
 import static io.neow3j.types.ContractParameter.byteArray;
 import static io.neow3j.types.ContractParameter.string;
 
-// @Ignore
 public class Scripts {
 
     private static Neow3j neow = Neow3j.build(new HttpService("http://localhost:40332"));
@@ -49,9 +48,9 @@ public class Scripts {
             Account.fromWIF("L1eV34wPoj9weqhGijdDLtVQzUpWGHszXXpdU9dPuh2nRFFzFa7E");
 
     private static Hash160 memeContractHash =
-            new Hash160("67dd5921623f51fe355e562f548e26abfe5a1ad7");
+            new Hash160("faffb1370bea6139b4ee31ff1b3b895cca09ef9e");
     private static Hash160 govContractHash =
-            new Hash160("ad261c4911ab962241a21cf714047439ee6fc00a");
+            new Hash160("7f8df089963cbfaba97edc2bfce3154c9fa43493");
 
     @Test
     public void deployMemeContract() throws Throwable {

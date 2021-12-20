@@ -28,6 +28,6 @@ dependencies {
 }
 
 neow3jCompiler {
-    className = "com.axlabs.MemeGovernance"
+    className = "com.axlabs.GovernanceContract"
     debug = true
 }

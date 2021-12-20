@@ -87,18 +87,22 @@ public class ContractsTest {
     private static final BigInteger minVotesInFavor = new BigInteger("3");
 
     @DeployConfig(MemeContract.class)
-    public static void memeContractDeployConfig(DeployConfiguration config) {
+    public static DeployConfiguration memeContractDeployConfig() {
+        DeployConfiguration config = new DeployConfiguration();
         config.setDeployParam(hash160(a1));
         config.setSigner(AccountSigner.calledByEntry(a1));
+        return config;
     }
 
     @DeployConfig(GovernanceContract.class)
-    public static void govContractDeployConfig(DeployConfiguration config, DeployContext ctx) {
+    public static DeployConfiguration govContractDeployConfig(DeployContext ctx) {
+        DeployConfiguration config = new DeployConfiguration();
         SmartContract memeContract = ctx.getDeployedContract(MemeContract.class);
         config.setDeployParam(hash160(memeContract.getScriptHash()));
         AccountSigner signer = AccountSigner.none(a1);
         signer.setAllowedContracts(memeContract.getScriptHash());
         config.setSigner(signer);
+        return config;
     }
 
     @BeforeAll
