@@ -65,7 +65,7 @@ public class GovernanceContract {
     public static void deploy(Object data, boolean update) throws Exception {
         if (!update) {
             Hash160 memeContractHash = (Hash160) data;
-            boolean isInitialized = (boolean) Contract.call(memeContractHash, "initialize", CallFlags.States, new Object[]{});
+            boolean isInitialized = (boolean) Contract.call(memeContractHash, "initialize", CallFlags.All, new Object[]{});
             if (isInitialized) {
                 contractMap.put(MEME_CONTRACT_KEY, memeContractHash.toByteString());
             } else {
@@ -176,8 +176,8 @@ public class GovernanceContract {
     }
 
     private static boolean isAccepted(String memeId) {
-        int votesFor = voteForMap.get(memeId).toInteger();
-        int votesAgainst = voteAgainstMap.get(memeId).toInteger();
+        int votesFor = voteForMap.getInteger(memeId);
+        int votesAgainst = voteAgainstMap.getInteger(memeId);
         return votesFor > votesAgainst && votesFor >= MIN_VOTES_IN_FAVOR;
     }
 
@@ -209,13 +209,13 @@ public class GovernanceContract {
         }
         voterMap.put(voterByteString, 1);
 
-        int currentVotes = voteCountMap.get(memeId).toInteger();
+        int currentVotes = voteCountMap.getInteger(memeId);
         voteCountMap.put(memeId, currentVotes + 1);
         if (inFavor) {
-            int votesFor = voteForMap.get(memeId).toInteger();
+            int votesFor = voteForMap.getInteger(memeId);
             voteForMap.put(memeId, votesFor + 1);
         } else {
-            int votesAgainst = voteAgainstMap.get(memeId).toInteger();
+            int votesAgainst = voteAgainstMap.getInteger(memeId);
             voteAgainstMap.put(memeId, votesAgainst + 1);
         }
         onVote.fire(memeId, voterByteString, inFavor);
@@ -245,10 +245,10 @@ public class GovernanceContract {
         if (isVoteInProgress(memeId)) {
             throw new Exception("The voting timeframe for this id is still open.");
         }
-        int votesFor = voteForMap.get(memeId).toInteger();
-        int votesAgainst = voteAgainstMap.get(memeId).toInteger();
+        int votesFor = voteForMap.getInteger(memeId);
+        int votesAgainst = voteAgainstMap.getInteger(memeId);
         if (votesFor > votesAgainst && votesFor >= MIN_VOTES_IN_FAVOR) {
-            if (proposalType.toInteger() == CREATE) {
+            if (proposalType.toInt() == CREATE) {
                 String description = descriptionMap.get(memeId).toString();
                 String url = urlMap.get(memeId).toString();
                 ByteString imageHash = imgHashMap.get(memeId);
@@ -277,8 +277,8 @@ public class GovernanceContract {
 
     private static boolean isVoteInProgress(String memeId) {
         int currentIndex = LedgerContract.currentIndex();
-        int finalizationBlock = finalizationMap.get(memeId).toInteger();
-        return finalizationBlock >= currentIndex;
+        int finalizationBlock = finalizationMap.getInteger(memeId);
+        return currentIndex < finalizationBlock;
     }
 
     private static void clearProposal(String memeId) {
@@ -306,11 +306,11 @@ public class GovernanceContract {
      */
     @Safe
     public static Proposal getProposal(String memeId) {
-        boolean create = proposalTypeMap.get(memeId).toInteger() == CREATE;
+        boolean create = proposalTypeMap.getInteger(memeId) == CREATE;
         boolean voteInProgress = isVoteInProgress(memeId);
-        int finalizationBlock = finalizationMap.get(memeId).toInteger();
-        int votesInFavor = voteForMap.get(memeId).toInteger();
-        int votesAgainst = voteAgainstMap.get(memeId).toInteger();
+        int finalizationBlock = finalizationMap.getInteger(memeId);
+        int votesInFavor = voteForMap.getInteger(memeId);
+        int votesAgainst = voteAgainstMap.getInteger(memeId);
 
         if (create) {
             String description = descriptionMap.get(memeId).toString();

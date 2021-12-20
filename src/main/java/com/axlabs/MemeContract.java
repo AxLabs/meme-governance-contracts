@@ -33,7 +33,7 @@ public class MemeContract {
             if (data == null) {
                 throw new Exception("Expects the owner hash as an argument but argument was null.");
             }
-            if (!(new Hash160((ByteString) data).isValid())) {
+            if (!Hash160.isValid(data)) {
                 throw new Exception("Expects the owner hash as an argument but argument was not a valid Hash160.");
             }
             contractMap.put(OWNER_KEY, (ByteString) data);
